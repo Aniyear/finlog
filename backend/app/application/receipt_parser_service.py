@@ -108,7 +108,12 @@ class ReceiptParserService:
             raise ValueError(f"Failed to extract text from PDF: {exc}") from exc
 
         full_text = "\n".join(text_parts).strip()
+        logger.info(f"Extracted text length: {len(full_text)} characters")
+        if len(full_text) > 0:
+            logger.info(f"First 100 characters of text: {full_text[:100]}...")
+            
         if not full_text:
+            logger.error("Extraction failed: PDF contains no text (likely a scan/image)")
             raise ValueError("PDF не содержит текста. Возможно, это скан или фото. Пожалуйста, используйте текстовый PDF.")
         return full_text
 
@@ -216,7 +221,7 @@ class ReceiptParserService:
             import openai
             import json
         except ImportError:
-            logger.warning("OpenAI library not installed, using regex fallback.")
+            logger.error("CRITICAL: OpenAI library not found in environment!")
             return cls._regex_parse(text)
 
         client = openai.OpenAI(api_key=api_key, base_url=base_url)
@@ -287,7 +292,7 @@ class ReceiptParserService:
         
         settings = get_settings()
         if settings.llm_api_key:
-            logger.info(f"Using LLM {settings.llm_model_name} for parsing")
+            logger.info(f"Using LLM {settings.llm_model_name} for parsing (Key length: {len(settings.llm_api_key)})")
             return cls._llm_parse(
                 text=text,
                 api_key=settings.llm_api_key,
@@ -295,5 +300,5 @@ class ReceiptParserService:
                 model=settings.llm_model_name
             )
         else:
-            logger.info("Using REGEX fallback for parsing (No LLM key)")
+            logger.error("LLM_API_KEY is MISSING in settings! Falling back to REGEX.")
             return cls._regex_parse(text)

@@ -9,6 +9,7 @@ import {
   getTransactions,
   getDebt,
   deleteTransaction,
+  getExportUrl,
 } from "@/lib/api";
 import TransactionList from "@/components/TransactionList";
 import DebtSummary from "@/components/DebtSummary";
@@ -153,11 +154,21 @@ export default function BrokerDetailPage() {
       </div>
 
       {/* Transaction List */}
-      <div className="section-header">
-        <h2>Операции</h2>
-        <span style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
-          {transactions.length} шт.
-        </span>
+      <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h2>Операции</h2>
+          <span style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
+            {transactions.length} шт.
+          </span>
+        </div>
+        <a 
+          href={getExportUrl(brokerId)} 
+          className="btn btn--ghost" 
+          style={{ fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+          download
+        >
+          📊 Выгрузить в Excel
+        </a>
       </div>
 
       <TransactionList

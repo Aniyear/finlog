@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 import datetime as dt
+from datetime import timezone, timedelta
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,6 +20,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database import Base
 
+# Default timezone for the application (UTC+5)
+APP_TZ = timezone(timedelta(hours=5))
+
+def get_now_tz():
+    return dt.datetime.now(APP_TZ)
+
+
 
 class BrokerModel(Base):
     """ORM model for the brokers table."""
@@ -30,7 +38,7 @@ class BrokerModel(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=dt.datetime.utcnow
+        DateTime(timezone=True), default=get_now_tz
     )
 
     transactions: Mapped[list["TransactionModel"]] = relationship(
@@ -83,7 +91,7 @@ class TransactionModel(Base):
     source: Mapped[str] = mapped_column(String(20), default="manual")
     raw_text: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=dt.datetime.utcnow
+        DateTime(timezone=True), default=get_now_tz
     )
 
     broker: Mapped["BrokerModel"] = relationship(back_populates="transactions")

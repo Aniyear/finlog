@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.transaction_service import TransactionService
@@ -136,6 +136,36 @@ async def create_transaction(
     )
 
 
+@router.post("/transactions/bulk", response_model=list[TransactionResponse], status_code=201)
+async def create_transactions_bulk(
+    body: list[TransactionCreate],
+    session: AsyncSession = Depends(get_session),
+):
+    """Create multiple transactions in bulk."""
+    service = TransactionService(session)
+    transactions = await service.create_many_transactions([b.model_dump() for b in body])
+    return [
+        TransactionResponse(
+            id=t.id,
+            broker_id=t.broker_id,
+            type=t.type,
+            amount=float(t.amount),
+            datetime=t.datetime.isoformat(),
+            receipt_number=t.receipt_number,
+            party_from=t.party_from,
+            party_to=t.party_to,
+            party_identifier=t.party_identifier,
+            kbk=t.kbk,
+            knp=t.knp,
+            comment=t.comment,
+            source=t.source,
+            raw_text=t.raw_text,
+            created_at=t.created_at.isoformat(),
+        )
+        for t in transactions
+    ]
+
+
 @router.delete("/transactions/{transaction_id}", status_code=204)
 async def delete_transaction(
     transaction_id: UUID,
@@ -146,3 +176,33 @@ async def delete_transaction(
     deleted = await service.delete_transaction(transaction_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+
+@router.get("/brokers/{broker_id}/export")
+async def export_transactions_excel(
+    broker_id: UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    """Export all transactions for a broker to an Excel file."""
+    # Fetch broker name for a better filename
+    from app.infrastructure.broker_repository import BrokerRepository
+    import urllib.parse
+    
+    broker_repo = BrokerRepository(session)
+    broker = await broker_repo.get_by_id(broker_id)
+    
+    if not broker:
+        raise HTTPException(status_code=404, detail="Broker not found")
+
+    service = TransactionService(session)
+    excel_bytes = await service.export_broker_transactions_to_excel(broker_id)
+    
+    # Safe filename with broker name
+    safe_name = "".join([c if c.isalnum() or c in " _-" else "_" for c in broker.name])
+    filename = f"otchet_{safe_name}.xlsx"
+    encoded_filename = urllib.parse.quote(filename)
+    
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+    }
+    return Response(content=excel_bytes, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)

@@ -129,7 +129,7 @@ export default function TransactionList({ transactions, onDelete }: Props) {
                 {tx.party_identifier && <div style={{ marginBottom: '4px' }}><strong>ИИН/БИН:</strong> {tx.party_identifier}</div>}
                 {tx.kbk && <div style={{ marginBottom: '4px' }}><strong>КБК:</strong> {tx.kbk}</div>}
                 {tx.knp && <div style={{ marginBottom: '4px' }}><strong>КНП:</strong> {tx.knp}</div>}
-                {tx.receipt_number && <div style={{ marginBottom: '4px' }}><strong>№ Документа:</strong> {tx.receipt_number}</div>}
+                {tx.receipt_number && <div style={{ marginBottom: '4px' }}><strong>№ чека:</strong> {tx.receipt_number}</div>}
                 {tx.comment && <div style={{ marginBottom: '4px' }}><strong>Комментарий:</strong> {tx.comment}</div>}
               </div>
             )}

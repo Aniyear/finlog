@@ -73,3 +73,37 @@ async def upload_receipt(file: UploadFile = File(...)):
         raw_text=result.raw_text,
         errors=result.errors,
     )
+
+@router.post("/bulk_upload", response_model=list[ReceiptParseResponse])
+async def bulk_upload_receipts(files: list[UploadFile] = File(...)):
+    """Upload multiple PDF receipts and parse them sequentially."""
+    responses = []
+    for file in files:
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            continue
+            
+        try:
+            file_bytes = await file.read()
+            result = ReceiptParserService.parse(file_bytes)
+            responses.append(ReceiptParseResponse(
+                type=result.type,
+                amount=result.amount,
+                datetime=result.parsed_datetime.isoformat() if result.parsed_datetime else result.datetime_str,
+                receipt_number=result.receipt_number,
+                party_from=result.party_from,
+                party_to=result.party_to,
+                party_identifier=result.party_identifier,
+                kbk=result.kbk,
+                knp=result.knp,
+                raw_text=result.raw_text,
+                errors=result.errors,
+            ))
+        except Exception as exc:
+            # We can return an error block or skip
+            responses.append(ReceiptParseResponse(
+                type="payment",
+                raw_text=file.filename or "unknown.pdf",
+                errors=[f"Failed to parse: {exc}"]
+            ))
+            
+    return responses

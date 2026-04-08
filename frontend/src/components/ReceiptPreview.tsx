@@ -75,7 +75,7 @@ export default function ReceiptPreview({
       </div>
 
       <div className="form-group">
-        <label className="form-label">№ квитанции</label>
+        <label className="form-label">№ чека</label>
         <input
           className="form-input"
           type="text"

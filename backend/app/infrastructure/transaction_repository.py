@@ -37,6 +37,13 @@ class TransactionRepository:
         await self._session.flush()
         return transaction
 
+    async def create_many(self, data_list: list[dict]) -> list[TransactionModel]:
+        """Create multiple transactions in one flush."""
+        transactions = [TransactionModel(**data) for data in data_list]
+        self._session.add_all(transactions)
+        await self._session.flush()
+        return transactions
+
     async def delete(self, transaction_id: UUID) -> bool:
         """Delete a transaction by ID. Returns True if deleted."""
         transaction = await self.get_by_id(transaction_id)

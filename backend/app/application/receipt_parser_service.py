@@ -109,7 +109,7 @@ class ReceiptParserService:
 
         full_text = "\n".join(text_parts).strip()
         if not full_text:
-            raise ValueError("No text could be extracted from the PDF.")
+            raise ValueError("PDF не содержит текста. Возможно, это скан или фото. Пожалуйста, используйте текстовый PDF.")
         return full_text
 
     @classmethod
@@ -222,13 +222,18 @@ class ReceiptParserService:
         client = openai.OpenAI(api_key=api_key, base_url=base_url)
         schema_json = LLMReceiptSchema.schema() if hasattr(LLMReceiptSchema, "schema") else LLMReceiptSchema.model_json_schema()
         prompt = (
-            f"You are a receipt parser. Extract data from the raw text into a strictly formatted JSON object.\n"
-            f"Your output MUST be a SINGLE JSON object exactly matching this schema:\n"
+            "You are a professional financial receipt parser.\n"
+            "Extract data from the raw text into a strictly formatted JSON object.\n"
+            "Your output MUST be a SINGLE JSON object exactly matching this schema:\n"
             f"{json.dumps(schema_json['properties'], ensure_ascii=False)}\n\n"
-            f"RULES:\n"
-            f"1. Return ONLY the values for these keys. Do NOT include descriptions or the word 'Pydantic'.\n"
-            f"2. Do NOT wrap the JSON in an array [].\n"
-            f"3. If a field is missing, set its value to null.\n\n"
+            "IMPORTANT RULES:\n"
+            "1. AMOUNT: Extract the TOTAL amount. If the amount has spaces as thousands separators (e.g., '650 000', '1 200 000'), capture the WHOLE number as a single numeric value (e.g., 650000, 1200000.0). NEVER stop at the space.\n"
+            "2. KBK/KNP: If the receipt includes a TEXT DESCRIPTION alongside the KBK/KNP code (e.g., '101202 - Налог на транспорт'), capture the WHOLE string (code and description).\n"
+            "3. IIN/BIN (party_identifier): ONLY extract values explicitly labeled as IIN or BIN (ИИН/БИН). NEVER use card numbers (e.g., **** 1234) or bank accounts for this field unless explicitly labeled as the Payer or Recipient Tax ID.\n"
+            "4. Receipt Number: Carefully look for document numbers, transaction IDs, or receipt IDs.\n"
+            "5. Return ONLY the values for these keys. Do NOT include descriptions or outside text.\n"
+            "6. Do NOT wrap the JSON in an array [].\n"
+            "7. If a field is missing, set its value to null.\n\n"
             f"Raw text:\n\n{text}"
         )
 
@@ -236,7 +241,7 @@ class ReceiptParserService:
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "You are a helpful data extraction assistant that outputs only a single JSON object."},
+                    {"role": "system", "content": "You are a professional financial data extractor. You only output valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},

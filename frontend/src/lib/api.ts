@@ -95,3 +95,34 @@ export async function uploadReceipt(file: File): Promise<ReceiptParseResult> {
 
   return res.json();
 }
+
+export async function bulkUploadReceipts(files: File[]): Promise<ReceiptParseResult[]> {
+  const formData = new FormData();
+  files.forEach(file => formData.append("files", file));
+
+  const res = await fetch(`${API_BASE}/receipts/bulk_upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Bulk upload error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function bulkCreateTransactions(
+  data: TransactionCreate[]
+): Promise<Transaction[]> {
+  return request<Transaction[]>("/transactions/bulk", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// Helper to get export URL
+export function getExportUrl(brokerId: string): string {
+  return `${API_BASE}/brokers/${brokerId}/export`;
+}

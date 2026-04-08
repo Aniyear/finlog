@@ -11,6 +11,7 @@ interface Props {
 
 export default function AddAccrualModal({ brokerId, onClose, onSuccess }: Props) {
   const [amount, setAmount] = useState("");
+  const [datetimeStr, setDatetimeStr] = useState("");
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export default function AddAccrualModal({ brokerId, onClose, onSuccess }: Props)
         broker_id: brokerId,
         type: "accrual",
         amount: numAmount,
-        datetime: new Date().toISOString(),
+        datetime: datetimeStr ? new Date(datetimeStr).toISOString() : new Date().toISOString(),
         comment: comment.trim() || undefined,
         source: "manual",
       });
@@ -70,6 +71,22 @@ export default function AddAccrualModal({ brokerId, onClose, onSuccess }: Props)
             onChange={(e) => setAmount(e.target.value)}
             autoFocus
           />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label" htmlFor="accrual-datetime">
+            Дата и время
+          </label>
+          <input
+            id="accrual-datetime"
+            className="form-input"
+            type="datetime-local"
+            value={datetimeStr}
+            onChange={(e) => setDatetimeStr(e.target.value)}
+          />
+          <div className="file-upload__hint" style={{ marginTop: '4px' }}>
+            Если не выбрать, запишется текущее время
+          </div>
         </div>
 
         <div className="form-group">

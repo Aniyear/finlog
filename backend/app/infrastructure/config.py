@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application configuration."""
 
-    database_url: str
+    database_url: str | None = None
     app_name: str = "FinLog"
     debug: bool = False
     

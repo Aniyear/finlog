@@ -228,6 +228,11 @@ class ReceiptParserService:
             prompt = (
                 "You are a professional financial receipt parser.\n"
                 "Extract data from the raw text into a strictly formatted JSON object.\n"
+                "RULES:\n"
+                "1. KBK (Код Бюджетной Классификации): Look for labels 'КБК' or 'Платеж'.\n"
+                "2. KNP (Код Назначения Платежа): Only extract if explicitly found. If not found, set to null.\n"
+                "3. PARTY fields: Return as simple strings, NEVER as nested objects.\n"
+                "4. TRANSFERS: For 'transfer' type, set kbk and knp to null.\n\n"
                 f"Schema properties to extract: {list(props.keys())}\n\n"
                 "Raw text:\n"
                 f"{text}\n\n"

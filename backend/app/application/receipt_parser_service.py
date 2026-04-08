@@ -7,10 +7,14 @@ from __future__ import annotations
 
 import logging
 import re
+import json
+import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Literal
 
+import fitz  # PyMuPDF
+import openai
 from pydantic import BaseModel, Field
 
 from app.infrastructure.config import get_settings
@@ -97,7 +101,6 @@ class ReceiptParserService:
     @staticmethod
     def extract_text(file_bytes: bytes) -> str:
         """Extract text from PDF bytes using PyMuPDF."""
-        import fitz  # PyMuPDF
         text_parts = []
         try:
             doc = fitz.open(stream=file_bytes, filetype="pdf")
@@ -105,15 +108,16 @@ class ReceiptParserService:
                 text_parts.append(page.get_text())
             doc.close()
         except Exception as exc:
+            logger.error(f"PyMuPDF extraction failed: {exc}")
             raise ValueError(f"Failed to extract text from PDF: {exc}") from exc
 
         full_text = "\n".join(text_parts).strip()
         logger.info(f"Extracted text length: {len(full_text)} characters")
         if len(full_text) > 0:
-            logger.info(f"First 100 characters of text: {full_text[:100]}...")
+            logger.info(f"First 100 chars of text: {full_text[:100].replace('\n', ' ')}")
             
         if not full_text:
-            logger.error("Extraction failed: PDF contains no text (likely a scan/image)")
+            logger.error("Extraction result: empty text (likely scan)")
             raise ValueError("PDF не содержит текста. Возможно, это скан или фото. Пожалуйста, используйте текстовый PDF.")
         return full_text
 
@@ -122,7 +126,6 @@ class ReceiptParserService:
         if not dt_str:
             return None, None
         
-        # Try finding a pattern in the LLM response just in case
         for pattern in cls.DATETIME_PATTERNS:
             match = re.search(pattern, dt_str)
             if match:
@@ -133,7 +136,6 @@ class ReceiptParserService:
                     except ValueError:
                         pass
                         
-        # If no pattern matches but we have a string, try direct parsing
         for fmt in cls.DATETIME_FORMATS:
             try:
                 return dt_str, datetime.strptime(dt_str, fmt)
@@ -179,8 +181,7 @@ class ReceiptParserService:
     def _regex_parse(cls, text: str) -> ParsedReceipt:
         """Old regex pipeline (Fallback)."""
         r_type = cls.detect_type(text)
-        dt_raw, dt_parsed = cls._parse_datetime_str(text) # actually we need to search text first for date
-        # Recalculate datetime explicitly from raw text
+        dt_raw, dt_parsed = cls._parse_datetime_str(text)
         for pattern in cls.DATETIME_PATTERNS:
             match = re.search(pattern, text)
             if match:
@@ -209,40 +210,35 @@ class ReceiptParserService:
             result.party_from = cls._parse_field(text, ["Отправитель", "From", "Плательщик"])
             result.party_to = cls._parse_field(text, ["Получатель", "To", "Бенефициар"])
 
-        if result.amount is None: result.errors.append("Could not extract amount via fallback")
-        if result.parsed_datetime is None: result.errors.append("Could not extract datetime via fallback")
         return result
 
     # --- LLM Pipeline ---
     @classmethod
     def _llm_parse(cls, text: str, api_key: str, base_url: str | None, model: str) -> ParsedReceipt:
-        """Parse strict JSON from text using OpenAI-compatible API in standard JSON mode."""
+        """Parse strict JSON from text using OpenAI-compatible API."""
         try:
-            import openai
-            import json
-        except ImportError:
-            logger.error("CRITICAL: OpenAI library not found in environment!")
-            return cls._regex_parse(text)
+            logger.info("Initializing OpenAI client...")
+            client = openai.OpenAI(api_key=api_key, base_url=base_url)
+            
+            logger.info("Preparing model schema and prompt...")
+            # Pydantic v2 check
+            if hasattr(LLMReceiptSchema, "model_json_schema"):
+                schema_json = LLMReceiptSchema.model_json_schema()
+            else:
+                schema_json = LLMReceiptSchema.schema()
+                
+            props = schema_json.get('properties', {})
+            
+            prompt = (
+                "You are a professional financial receipt parser.\n"
+                "Extract data from the raw text into a strictly formatted JSON object.\n"
+                f"Schema properties to extract: {list(props.keys())}\n\n"
+                "Raw text:\n"
+                f"{text}\n\n"
+                "Return ONLY a JSON object."
+            )
 
-        client = openai.OpenAI(api_key=api_key, base_url=base_url)
-        schema_json = LLMReceiptSchema.schema() if hasattr(LLMReceiptSchema, "schema") else LLMReceiptSchema.model_json_schema()
-        prompt = (
-            "You are a professional financial receipt parser.\n"
-            "Extract data from the raw text into a strictly formatted JSON object.\n"
-            "Your output MUST be a SINGLE JSON object exactly matching this schema:\n"
-            f"{json.dumps(schema_json['properties'], ensure_ascii=False)}\n\n"
-            "IMPORTANT RULES:\n"
-            "1. AMOUNT: Extract the TOTAL amount. If the amount has spaces as thousands separators (e.g., '650 000', '1 200 000'), capture the WHOLE number as a single numeric value (e.g., 650000, 1200000.0). NEVER stop at the space.\n"
-            "2. KBK/KNP: If the receipt includes a TEXT DESCRIPTION alongside the KBK/KNP code (e.g., '101202 - Налог на транспорт'), capture the WHOLE string (code and description).\n"
-            "3. IIN/BIN (party_identifier): ONLY extract values explicitly labeled as IIN or BIN (ИИН/БИН). NEVER use card numbers (e.g., **** 1234) or bank accounts for this field unless explicitly labeled as the Payer or Recipient Tax ID.\n"
-            "4. Receipt Number: Carefully look for document numbers, transaction IDs, or receipt IDs.\n"
-            "5. Return ONLY the values for these keys. Do NOT include descriptions or outside text.\n"
-            "6. Do NOT wrap the JSON in an array [].\n"
-            "7. If a field is missing, set its value to null.\n\n"
-            f"Raw text:\n\n{text}"
-        )
-
-        try:
+            logger.info(f"Sending request to LLM ({model})...")
             response = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -252,62 +248,63 @@ class ReceiptParserService:
                 response_format={"type": "json_object"},
                 temperature=0.0
             )
+            
             content = response.choices[0].message.content
-            logger.info(f"LLM Raw Response Content: {content}")
+            logger.info(f"LLM Response received. Content length: {len(content) if content else 0}")
+            logger.info(f"LLM Raw Content: {content}")
             
             if not content:
-                logger.warning("LLM returned an empty response.")
+                logger.warning("LLM returned empty content.")
                 return cls._regex_parse(text)
 
             parsed_data = json.loads(content)
-            
-            # Handle if Llama wraps the object in a list
             if isinstance(parsed_data, list) and len(parsed_data) > 0:
                 parsed_data = parsed_data[0]
                 
             parsed = LLMReceiptSchema.model_validate(parsed_data)
-            logger.info("LLM data validated successfully via Pydantic.")
+            logger.info("Pydantic validation successful.")
+            
+            dt_raw, dt_parsed = cls._parse_datetime_str(parsed.datetime_str)
+            
+            return ParsedReceipt(
+                type=parsed.type,
+                amount=parsed.amount,
+                datetime_str=dt_raw,
+                parsed_datetime=dt_parsed,
+                receipt_number=str(parsed.receipt_number) if parsed.receipt_number is not None else None,
+                party_from=parsed.party_from,
+                party_to=parsed.party_to,
+                party_identifier=str(parsed.party_identifier) if parsed.party_identifier is not None else None,
+                kbk=str(parsed.kbk) if parsed.kbk is not None else None,
+                knp=str(parsed.knp) if parsed.knp is not None else None,
+                raw_text=text
+            )
+
         except Exception as e:
-            logger.error(f"LLM Parsing failed with error: {str(e)}")
-            import traceback
+            logger.error(f"LLM Step failed: {str(e)}")
             logger.error(traceback.format_exc())
-            return cls._regex_parse(text)  # seamless fallback
-
-        dt_raw, dt_parsed = cls._parse_datetime_str(parsed.datetime_str)
-        
-        result = ParsedReceipt(
-            type=parsed.type,
-            amount=parsed.amount,
-            datetime_str=dt_raw,
-            parsed_datetime=dt_parsed,
-            receipt_number=str(parsed.receipt_number) if parsed.receipt_number is not None else None,
-            party_from=parsed.party_from,
-            party_to=parsed.party_to,
-            party_identifier=str(parsed.party_identifier) if parsed.party_identifier is not None else None,
-            kbk=str(parsed.kbk) if parsed.kbk is not None else None,
-            knp=str(parsed.knp) if parsed.knp is not None else None,
-            raw_text=text
-        )
-
-        if result.amount is None: result.errors.append("LLM could not find amount")
-        if result.parsed_datetime is None: result.errors.append("LLM could not find/validate datetime format")
-
-        return result
+            return cls._regex_parse(text)
 
     @classmethod
     def parse(cls, file_bytes: bytes) -> ParsedReceipt:
         """Main entry point for parsing."""
-        text = cls.extract_text(file_bytes)
-        
-        settings = get_settings()
-        if settings.llm_api_key:
-            logger.info(f"Using LLM {settings.llm_model_name} for parsing (Key length: {len(settings.llm_api_key)})")
-            return cls._llm_parse(
-                text=text,
-                api_key=settings.llm_api_key,
-                base_url=settings.llm_base_url,
-                model=settings.llm_model_name
-            )
-        else:
-            logger.error("LLM_API_KEY is MISSING in settings! Falling back to REGEX.")
-            return cls._regex_parse(text)
+        try:
+            text = cls.extract_text(file_bytes)
+            settings = get_settings()
+            
+            if settings.llm_api_key:
+                logger.info(f"Starting LLM parse path (Key len: {len(settings.llm_api_key)})")
+                return cls._llm_parse(
+                    text=text,
+                    api_key=settings.llm_api_key,
+                    base_url=settings.llm_base_url,
+                    model=settings.llm_model_name
+                )
+            else:
+                logger.info("No LLM key, using regex.")
+                return cls._regex_parse(text)
+        except Exception as e:
+            logger.error(f"Global parse error: {e}")
+            logger.error(traceback.format_exc())
+            # Final fallback
+            return ParsedReceipt(type="payment", raw_text="Global Error", errors=[str(e)])

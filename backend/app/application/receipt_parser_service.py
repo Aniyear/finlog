@@ -32,7 +32,6 @@ class ParsedReceipt:
     receipt_number: Optional[str] = None
     party_from: Optional[str] = None
     party_to: Optional[str] = None
-    party_identifier: Optional[str] = None
     kbk: Optional[str] = None
     knp: Optional[str] = None
     raw_text: str = ""
@@ -59,14 +58,11 @@ class LLMReceiptSchema(BaseModel):
     party_to: str | None = Field(
         default=None, description="Получатель, бенефициар (ФИО или название)."
     )
-    party_identifier: str | int | None = Field(
-        default=None, description="ИИН/БИН плательщика или получателя, если указано."
-    )
     kbk: str | int | None = Field(
-        default=None, description="КБК (код бюджетной классификации)."
+        default=None, description="КБК (код бюджетной классификации). Оставлять null для переводов (transfer)."
     )
     knp: str | int | None = Field(
-        default=None, description="КНП (код назначения платежа)."
+        default=None, description="КНП (код назначения платежа). Оставлять null для переводов (transfer)."
     )
 
 
@@ -286,6 +282,12 @@ class ReceiptParserService:
             parsed = LLMReceiptSchema.model_validate(parsed_data)
             logger.info("Pydantic validation successful.")
             
+            # 3. Handle transfers: Clear KBK/KNP if type is transfer
+            if parsed.type == "transfer":
+                parsed.kbk = None
+                parsed.knp = None
+                logger.info("Transfer detected: KBK/KNP cleared.")
+            
             dt_raw, dt_parsed = cls._parse_datetime_str(parsed.datetime_str)
             
             return ParsedReceipt(
@@ -296,7 +298,6 @@ class ReceiptParserService:
                 receipt_number=str(parsed.receipt_number) if parsed.receipt_number is not None else None,
                 party_from=parsed.party_from,
                 party_to=parsed.party_to,
-                party_identifier=str(parsed.party_identifier) if parsed.party_identifier is not None else None,
                 kbk=str(parsed.kbk) if parsed.kbk is not None else None,
                 knp=str(parsed.knp) if parsed.knp is not None else None,
                 raw_text=text

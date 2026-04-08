@@ -9,9 +9,9 @@ from app.infrastructure.config import get_settings
 
 settings = get_settings()
 
-# Convert postgresql:// to postgresql+asyncpg:// for async support
+# Convert postgresql:// to postgresql+psycopg:// for async support (psycopg 3)
 database_url = settings.database_url.replace(
-    "postgresql://", "postgresql+asyncpg://"
+    "postgresql://", "postgresql+psycopg://"
 )
 
 engine = create_async_engine(

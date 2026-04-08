@@ -41,41 +41,108 @@ class ParsedReceipt:
 class LLMReceiptSchema(BaseModel):
     """Pydantic schema for LLM structured output."""
     type: Literal["payment", "transfer"] = Field(
-        description="Тип чека: 'payment' (оплата услуг, налогов) или 'transfer' (перевод физ. лицу)."
+        description="ONLY 'payment' or 'transfer'. Use 'transfer' ONLY if it is a bank transfer to an individual."
     )
     amount: float | None = Field(
-        default=None, description="Сумма операции. Только число (разделитель - точка)."
+        default=None,
+        description="The total payment amount as a number only. No spaces, no currency signs. Use dot as decimal separator."
     )
     datetime_str: str | None = Field(
-        default=None, description="Дата и время из чека 'как есть' (например '03.02.2026 15:35')."
+        default=None,
+        description="Date and time exactly as written in the receipt, e.g. '09.01.2026 15:03'."
     )
     receipt_number: str | int | None = Field(
-        default=None, description="Номер чека или квитанции, документа."
+        default=None,
+        description="The receipt/document/transaction number. A numeric or alphanumeric ID."
     )
     party_from: str | None = Field(
-        default=None, description="Отправитель или плательщик (ФИО или название)."
+        default=None,
+        description="The sender or payer. Return ONLY a plain string with their name. NO nested objects."
     )
     party_to: str | None = Field(
-        default=None, description="Получатель, бенефициар (ФИО или название)."
+        default=None,
+        description="The recipient or beneficiary. Return ONLY a plain string with their name. NO nested objects."
     )
     kbk: str | int | None = Field(
-        default=None, description="КБК (код бюджетной классификации). Оставлять null для переводов (transfer)."
+        default=None,
+        description="Budget Classification Code. Look for the label 'КБК' or 'Платеж'. Set null for transfers."
     )
     knp: str | int | None = Field(
-        default=None, description="КНП (код назначения платежа). Оставлять null для переводов (transfer)."
+        default=None,
+        description="Payment Purpose Code. Look ONLY for the label 'КНП'. If the label 'КНП' is NOT in the text, set null. Set null for transfers."
     )
+
+
+# Explicit prompt template for Kazakhstani financial receipts
+_SYSTEM_PROMPT = """You are a precise financial receipt data extractor for Kazakhstani bank receipts.
+You extract ONLY what is explicitly written in the receipt text. You NEVER invent or guess fields.
+You ALWAYS output a single valid JSON object. You NEVER output arrays or nested objects inside string fields."""
+
+_USER_PROMPT_TEMPLATE = """Extract data from this Kazakhstani bank receipt into a JSON object.
+
+=== OUTPUT JSON SCHEMA ===
+{{
+  "type": "payment" | "transfer",
+  "amount": <number or null>,
+  "datetime_str": "<string or null>",
+  "receipt_number": "<string or null>",
+  "party_from": "<plain string or null>",
+  "party_to": "<plain string or null>",
+  "kbk": "<string or null>",
+  "knp": "<string or null>"
+}}
+
+=== STRICT RULES ===
+
+RULE 1 - TYPE:
+- Use "payment" if the receipt is a payment for government services, taxes, duties, or utility bills.
+- Use "transfer" ONLY if it is a money transfer to another individual's bank account/card.
+- Default is "payment" if uncertain.
+
+RULE 2 - AMOUNT:
+- Extract the TOTAL payment amount (the largest/final amount in the receipt).
+- Remove ALL spaces from the number. Use a dot (.) as decimal separator.
+- Example: "3 910 000.00 ₸" → 3910000.0
+
+RULE 3 - DATETIME:
+- Copy the date and time EXACTLY as it appears in the text (e.g. "09.01.2026 15:03:22").
+- If no time is present, copy just the date.
+
+RULE 4 - RECEIPT NUMBER:
+- Look for the document/receipt/transaction ID labeled: "№ квитанции", "Документ №", "ID транзакции", "Номер", "E1008...", or a long numeric string near such labels.
+- Copy the ID value only, not the label.
+
+RULE 5 - PARTY_FROM:
+- Return ONLY a plain text string — the name of the payer/sender.
+- Example: "Товарищество с ограниченной ответственностью \\"EKAY LTD\\"" or "Иванов Иван Иванович".
+- NEVER return a JSON object, dict, or nested structure. ALWAYS a simple string.
+
+RULE 6 - PARTY_TO:
+- Return ONLY a plain text string — the name of the recipient/beneficiary.
+- Example: "РГУ \\"УГД по городу Талдыкорган ДГД по области Жетісу КГД МФ РК\\"".
+- NEVER return a JSON object, dict, or nested structure. ALWAYS a simple string.
+
+RULE 7 - KBK (Код бюджетной классификации):
+- Extract this ONLY if you find the label "КБК" or "Назначение платежа" or "Платеж" in the text.
+- Copy the code and its description together as one string.
+- Example: "106119 - Авансовые платежи..."
+- Set to null for "transfer" type receipts.
+
+RULE 8 - KNP (Код назначения платежа):
+- Extract this ONLY IF the text contains the explicit label "КНП" followed by a value.
+- If the label "КНП" is NOT present in the text → set to null.
+- Do NOT confuse KNP with KBK. They are different fields.
+- Set to null for "transfer" type receipts.
+
+=== RECEIPT TEXT ===
+{text}
+
+=== YOUR JSON OUTPUT (no explanation, just JSON) ==="""
 
 
 class ReceiptParserService:
     """Service for extracting and parsing PDF receipt data."""
 
-    # --- Regex Fallback Configuration ---
-    AMOUNT_PATTERNS = [
-        r"(\d[\d\s]*\d)\s*₸",
-        r"(\d[\d\s]*[\.,]\d{2})\s*(?:KZT|тенге|тг)",
-        r"[Сс]умма[:\s]*(\d[\d\s]*[\.,]?\d*)",
-        r"[Aa]mount[:\s]*(\d[\d\s]*[\.,]?\d*)",
-    ]
     DATETIME_PATTERNS = [
         r"(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}(?::\d{2})?)",
         r"(\d{2}-\d{2}-\d{4}\s+\d{2}:\d{2}(?::\d{2})?)",
@@ -88,10 +155,14 @@ class ReceiptParserService:
         "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S",
         "%d.%m.%Y", "%d-%m-%Y",
     ]
+    AMOUNT_PATTERNS = [
+        r"(\d[\d\s]*\d)\s*₸",
+        r"(\d[\d\s]*[\.,]\d{2})\s*(?:KZT|тенге|тг)",
+        r"[Сс]умма[:\s]*(\d[\d\s]*[\.,]?\d*)",
+    ]
     RECEIPT_NUMBER_PATTERNS = [
         r"№\s*(?:квитанции|документа|чека)[:\s]*([^\n]+)",
         r"(?:Квитанция|Чек|Документ)\s*№?\s*[:\s]*([A-Za-z0-9\-]+)",
-        r"(?:Receipt|Document)\s*#?\s*[:\s]*([A-Za-z0-9\-]+)",
     ]
 
     @staticmethod
@@ -109,19 +180,22 @@ class ReceiptParserService:
 
         full_text = "\n".join(text_parts).strip()
         logger.info(f"Extracted text length: {len(full_text)} characters")
-        if len(full_text) > 0:
-            logger.info(f"First 100 chars of text: {full_text[:100].replace('\n', ' ')}")
-            
+        if full_text:
+            logger.info(f"First 150 chars: {full_text[:150].replace(chr(10), ' ')}")
+
         if not full_text:
-            logger.error("Extraction result: empty text (likely scan)")
-            raise ValueError("PDF не содержит текста. Возможно, это скан или фото. Пожалуйста, используйте текстовый PDF.")
+            logger.error("Empty text extracted — likely a scanned image PDF")
+            raise ValueError(
+                "PDF не содержит текста. Возможно, это скан или фото. "
+                "Пожалуйста, используйте текстовый PDF."
+            )
         return full_text
 
     @classmethod
     def _parse_datetime_str(cls, dt_str: str | None) -> tuple[Optional[str], Optional[datetime]]:
         if not dt_str:
             return None, None
-        
+
         for pattern in cls.DATETIME_PATTERNS:
             match = re.search(pattern, dt_str)
             if match:
@@ -131,53 +205,31 @@ class ReceiptParserService:
                         return raw_dt, datetime.strptime(raw_dt, fmt)
                     except ValueError:
                         pass
-                        
+
         for fmt in cls.DATETIME_FORMATS:
             try:
                 return dt_str, datetime.strptime(dt_str, fmt)
             except ValueError:
                 pass
+
         return dt_str, None
 
-    # --- Regex Fallback Methods ---
-    @classmethod
-    def detect_type(cls, text: str) -> str:
-        text_upper = text.upper()
-        if "КНП" in text_upper or "КБК" in text_upper: return "payment"
-        if "ОТПРАВИТЕЛЬ" in text_upper or "SENDER" in text_upper: return "transfer"
-        return "payment"
-
-    @classmethod
-    def _parse_amount(cls, text: str) -> Optional[float]:
-        for pattern in cls.AMOUNT_PATTERNS:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                try:
-                    return float(match.group(1).replace(" ", "").replace(",", "."))
-                except ValueError:
-                    pass
-        return None
-
-    @classmethod
-    def _parse_receipt_number(cls, text: str) -> Optional[str]:
-        for pattern in cls.RECEIPT_NUMBER_PATTERNS:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match: return match.group(1).strip()
-        return None
-
-    @classmethod
-    def _parse_field(cls, text: str, keywords: list[str]) -> Optional[str]:
-        for keyword in keywords:
-            match = re.search(rf"{keyword}[:\s]*([^\n]+)", text, re.IGNORECASE)
-            if match and match.group(1).strip():
-                return match.group(1).strip()
-        return None
-
+    # --- Regex Fallback ---
     @classmethod
     def _regex_parse(cls, text: str) -> ParsedReceipt:
-        """Old regex pipeline (Fallback)."""
-        r_type = cls.detect_type(text)
-        dt_raw, dt_parsed = cls._parse_datetime_str(text)
+        """Regex fallback pipeline used when LLM is unavailable or fails."""
+        text_upper = text.upper()
+
+        # Detect type
+        if "КНП" in text_upper or "КБК" in text_upper or "ГОСПОШЛИН" in text_upper:
+            r_type = "payment"
+        elif "ОТПРАВИТЕЛЬ" in text_upper or "ПЕРЕВОД" in text_upper:
+            r_type = "transfer"
+        else:
+            r_type = "payment"
+
+        # Extract datetime
+        dt_raw, dt_parsed = None, None
         for pattern in cls.DATETIME_PATTERNS:
             match = re.search(pattern, text)
             if match:
@@ -189,112 +241,141 @@ class ReceiptParserService:
                         break
                     except ValueError:
                         pass
+                if dt_parsed:
+                    break
+
+        # Extract amount
+        amount = None
+        for pattern in cls.AMOUNT_PATTERNS:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    amount = float(match.group(1).replace(" ", "").replace(",", "."))
+                    break
+                except ValueError:
+                    pass
+
+        # Extract receipt number
+        receipt_number = None
+        for pattern in cls.RECEIPT_NUMBER_PATTERNS:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                receipt_number = match.group(1).strip()
+                break
+
+        def find_field(keywords: list[str]) -> Optional[str]:
+            for kw in keywords:
+                m = re.search(rf"{kw}[:\s]*([^\n]+)", text, re.IGNORECASE)
+                if m and m.group(1).strip():
+                    return m.group(1).strip()
+            return None
 
         result = ParsedReceipt(
-            type=r_type, raw_text=text, amount=cls._parse_amount(text),
-            datetime_str=dt_raw, parsed_datetime=dt_parsed,
-            receipt_number=cls._parse_receipt_number(text)
+            type=r_type,
+            raw_text=text,
+            amount=amount,
+            datetime_str=dt_raw,
+            parsed_datetime=dt_parsed,
+            receipt_number=receipt_number,
         )
 
         if r_type == "payment":
-            result.party_from = cls._parse_field(text, ["Плательщик", "Отправитель", "From"])
-            result.party_to = cls._parse_field(text, ["Получатель", "Бенефициар", "To"])
-            result.party_identifier = cls._parse_field(text, ["ИИН", "БИН"])
-            result.kbk = cls._parse_field(text, ["КБК"])
-            result.knp = cls._parse_field(text, ["КНП"])
+            result.party_from = find_field(["Плательщик", "Отправитель"])
+            result.party_to = find_field(["Получатель", "Бенефициар"])
+            result.kbk = find_field(["КБК", "Назначение платежа", "Платеж"])
+            result.knp = find_field(["КНП"])
         else:
-            result.party_from = cls._parse_field(text, ["Отправитель", "From", "Плательщик"])
-            result.party_to = cls._parse_field(text, ["Получатель", "To", "Бенефициар"])
+            result.party_from = find_field(["Отправитель", "Плательщик"])
+            result.party_to = find_field(["Получатель", "Бенефициар"])
 
         return result
 
     # --- LLM Pipeline ---
     @classmethod
+    def _sanitize_llm_output(cls, parsed_data: dict) -> dict:
+        """Fix common LLM mistakes before Pydantic validation."""
+        # 1. Normalize type field
+        raw_type = str(parsed_data.get("type", "payment")).lower()
+        if "transfer" in raw_type or "перевод" in raw_type:
+            parsed_data["type"] = "transfer"
+        else:
+            parsed_data["type"] = "payment"
+
+        # 2. Unwrap nested dicts in party fields
+        for field_name in ["party_from", "party_to"]:
+            val = parsed_data.get(field_name)
+            if isinstance(val, dict):
+                parts = []
+                for key in ["name", "full_name", "organization"]:
+                    if val.get(key):
+                        parts.append(str(val[key]))
+                if not parts:
+                    # Take the first string value found
+                    for v in val.values():
+                        if isinstance(v, str) and v.strip():
+                            parts.append(v.strip())
+                            break
+                parsed_data[field_name] = ", ".join(parts) if parts else None
+
+        # 3. Convert amount: handle string with spaces/commas
+        raw_amount = parsed_data.get("amount")
+        if isinstance(raw_amount, str):
+            try:
+                parsed_data["amount"] = float(
+                    raw_amount.replace(" ", "").replace(",", ".")
+                )
+            except ValueError:
+                parsed_data["amount"] = None
+
+        # 4. Unwrap list wrapping
+        if isinstance(parsed_data, list) and len(parsed_data) > 0:
+            parsed_data = parsed_data[0]
+
+        return parsed_data
+
+    @classmethod
     def _llm_parse(cls, text: str, api_key: str, base_url: str | None, model: str) -> ParsedReceipt:
-        """Parse strict JSON from text using OpenAI-compatible API."""
+        """Parse receipt using LLM with sanitized output and Pydantic validation."""
         try:
             logger.info("Initializing OpenAI client...")
             client = openai.OpenAI(api_key=api_key, base_url=base_url)
-            
-            logger.info("Preparing model schema and prompt...")
-            # Pydantic v2 check
-            if hasattr(LLMReceiptSchema, "model_json_schema"):
-                schema_json = LLMReceiptSchema.model_json_schema()
-            else:
-                schema_json = LLMReceiptSchema.schema()
-                
-            props = schema_json.get('properties', {})
-            
-            prompt = (
-                "You are a professional financial receipt parser.\n"
-                "Extract data from the raw text into a strictly formatted JSON object.\n"
-                "RULES:\n"
-                "1. KBK (Код Бюджетной Классификации): Look for labels 'КБК' or 'Платеж'.\n"
-                "2. KNP (Код Назначения Платежа): Only extract if explicitly found. If not found, set to null.\n"
-                "3. PARTY fields: Return as simple strings, NEVER as nested objects.\n"
-                "4. TRANSFERS: For 'transfer' type, set kbk and knp to null.\n\n"
-                f"Schema properties to extract: {list(props.keys())}\n\n"
-                "Raw text:\n"
-                f"{text}\n\n"
-                "Return ONLY a JSON object."
-            )
+
+            prompt = _USER_PROMPT_TEMPLATE.format(text=text)
 
             logger.info(f"Sending request to LLM ({model})...")
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "You are a professional financial data extractor. You only output valid JSON."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.0
+                temperature=0.0,
             )
-            
+
             content = response.choices[0].message.content
-            logger.info(f"LLM Response received. Content length: {len(content) if content else 0}")
-            logger.info(f"LLM Raw Content: {content}")
-            
+            logger.info(f"LLM response length: {len(content) if content else 0}")
+            logger.info(f"LLM raw content: {content}")
+
             if not content:
-                logger.warning("LLM returned empty content.")
+                logger.warning("LLM returned empty content — falling back to regex.")
                 return cls._regex_parse(text)
 
             parsed_data = json.loads(content)
-            
-            # --- Data Sanitization (for models that ignore strict schema) ---
-            # 1. Map 'type' to valid literals
-            raw_type = str(parsed_data.get("type", "payment")).lower()
-            if "transfer" in raw_type or "перевод" in raw_type:
-                parsed_data["type"] = "transfer"
-            else:
-                parsed_data["type"] = "payment"
+            parsed_data = cls._sanitize_llm_output(parsed_data)
 
-            # 2. Convert dicts in party fields to strings
-            for field_name in ["party_from", "party_to"]:
-                val = parsed_data.get(field_name)
-                if isinstance(val, dict):
-                    # Combine name/iin/bin into a single string
-                    parts = []
-                    if val.get("name"): parts.append(str(val["name"]))
-                    if val.get("bin"): parts.append(f"БИН {val['bin']}")
-                    if val.get("iin"): parts.append(f"ИИН {val['iin']}")
-                    parsed_data[field_name] = ", ".join(parts)
-
-            # Handle if Llama wraps the object in a list
-            if isinstance(parsed_data, list) and len(parsed_data) > 0:
-                parsed_data = parsed_data[0]
-                
-            logger.info(f"Sanitized data before validation: {parsed_data}")
+            logger.info(f"Sanitized data: {parsed_data}")
             parsed = LLMReceiptSchema.model_validate(parsed_data)
             logger.info("Pydantic validation successful.")
-            
-            # 3. Handle transfers: Clear KBK/KNP if type is transfer
+
+            # Force clear KBK/KNP for transfers
             if parsed.type == "transfer":
                 parsed.kbk = None
                 parsed.knp = None
-                logger.info("Transfer detected: KBK/KNP cleared.")
-            
+                logger.info("Transfer receipt: KBK/KNP cleared.")
+
             dt_raw, dt_parsed = cls._parse_datetime_str(parsed.datetime_str)
-            
+
             return ParsedReceipt(
                 type=parsed.type,
                 amount=parsed.amount,
@@ -305,34 +386,34 @@ class ReceiptParserService:
                 party_to=parsed.party_to,
                 kbk=str(parsed.kbk) if parsed.kbk is not None else None,
                 knp=str(parsed.knp) if parsed.knp is not None else None,
-                raw_text=text
+                raw_text=text,
             )
 
         except Exception as e:
-            logger.error(f"LLM Step failed: {str(e)}")
+            logger.error(f"LLM parse failed: {str(e)}")
             logger.error(traceback.format_exc())
             return cls._regex_parse(text)
 
     @classmethod
     def parse(cls, file_bytes: bytes) -> ParsedReceipt:
-        """Main entry point for parsing."""
+        """Main entry point for parsing a receipt PDF."""
         try:
             text = cls.extract_text(file_bytes)
             settings = get_settings()
-            
+
             if settings.llm_api_key:
-                logger.info(f"Starting LLM parse path (Key len: {len(settings.llm_api_key)})")
+                logger.info(f"Using LLM [{settings.llm_model_name}] (key length: {len(settings.llm_api_key)})")
                 return cls._llm_parse(
                     text=text,
                     api_key=settings.llm_api_key,
                     base_url=settings.llm_base_url,
-                    model=settings.llm_model_name
+                    model=settings.llm_model_name,
                 )
             else:
-                logger.info("No LLM key, using regex.")
+                logger.warning("No LLM_API_KEY found — using regex fallback.")
                 return cls._regex_parse(text)
+
         except Exception as e:
             logger.error(f"Global parse error: {e}")
             logger.error(traceback.format_exc())
-            # Final fallback
-            return ParsedReceipt(type="payment", raw_text="Global Error", errors=[str(e)])
+            return ParsedReceipt(type="payment", raw_text="", errors=[str(e)])

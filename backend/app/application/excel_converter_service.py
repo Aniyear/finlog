@@ -55,12 +55,14 @@ class ExcelConverterService:
     """In-memory Excel grouping engine."""
 
     @staticmethod
-    def preview_input(file_bytes: bytes) -> dict:
+    def preview_input(file_bytes: bytes, sheet_name: str | None = None) -> dict:
         """
         Parse Excel and return preview data.
 
         Returns:
             {
+                "sheets": ["Sheet1", "Sheet2"],
+                "current_sheet": "Sheet1",
                 "columns": ["Col1", "Col2", ...],
                 "sample_rows": [[val1, val2, ...], ...],
                 "row_count": 150,
@@ -72,10 +74,16 @@ class ExcelConverterService:
 
         try:
             wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+            sheets = wb.sheetnames
         except Exception as exc:
             raise ValueError(f"Cannot read Excel file: {exc}")
 
-        ws = wb.active
+        if sheet_name and sheet_name in sheets:
+            ws = wb[sheet_name]
+        else:
+            ws = wb.active
+            sheet_name = ws.title if ws else ""
+
         if ws is None:
             wb.close()
             raise ValueError("No active sheet found")
@@ -123,6 +131,8 @@ class ExcelConverterService:
             ])
 
         return {
+            "sheets": sheets,
+            "current_sheet": sheet_name,
             "columns": headers,
             "sample_rows": sample_rows,
             "row_count": row_count,
@@ -134,6 +144,7 @@ class ExcelConverterService:
         file_bytes: bytes,
         group_by_column: str,
         column_rules: dict[str, str],
+        sheet_name: str | None = None,
     ) -> dict:
         """
         Group rows by key column and aggregate.
@@ -160,7 +171,11 @@ class ExcelConverterService:
         except Exception as exc:
             raise ValueError(f"Cannot read Excel file: {exc}")
 
-        ws = wb.active
+        if sheet_name and sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+        else:
+            ws = wb.active
+
         if ws is None:
             wb.close()
             raise ValueError("No active sheet found")
@@ -266,7 +281,7 @@ class ExcelConverterService:
             top=Side(style="thin", color="D1D5DB"),
             bottom=Side(style="thin", color="D1D5DB"),
         )
-        data_alignment = Alignment(vertical="center", wrap_text=True)
+        data_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
         # Write headers
         ws.append(columns)

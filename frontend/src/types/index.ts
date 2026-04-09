@@ -117,6 +117,8 @@ export interface DebtInfo {
 // --- Excel Converter Module ---
 
 export interface ConverterPreview {
+  sheets: string[];
+  current_sheet: string;
   columns: string[];
   sample_rows: string[][];
   row_count: number;

@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import type { ConverterPreview, ConverterProcessResult, AggregationRule } from "@/types";
-import { converterPreview, converterProcess, converterDownload } from "@/lib/api";
+import { converterPreview, converterProcess, converterDownload, converterPreviewStored } from "@/lib/api";
 import ModuleGuard from "@/components/ModuleGuard";
 
 type Step = "upload" | "configure" | "result";
@@ -23,6 +23,7 @@ function ConverterContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
+  const [selectedSheet, setSelectedSheet] = useState<string>("");
 
   // Configuration
   const [groupByColumn, setGroupByColumn] = useState<string>("");
@@ -36,6 +37,7 @@ function ConverterContent() {
     try {
       const data = await converterPreview(file);
       setPreview(data);
+      setSelectedSheet(data.current_sheet);
 
       // Auto-configure rules based on detected types
       const rules: Record<string, AggregationRule> = {};
@@ -63,6 +65,36 @@ function ConverterContent() {
     }
   }, []);
 
+  const handleSheetChange = async (sheetName: string) => {
+    setSelectedSheet(sheetName);
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await converterPreviewStored(sheetName);
+      setPreview(data);
+      
+      const rules: Record<string, AggregationRule> = {};
+      data.columns.forEach((col) => {
+        const lowerCol = col.toLowerCase();
+        if (lowerCol.includes("price") || lowerCol.includes("цена")) {
+          rules[col] = "unique_join";
+        } else {
+          rules[col] = data.column_types[col] === "numeric" ? "sum" : "unique_join";
+        }
+      });
+      setColumnRules(rules);
+
+      const defaultGroupCol = data.columns.find(
+        (col) => col.toLowerCase().includes("hs code") || col.toLowerCase().includes("тн вэд")
+      ) || data.columns[0] || "";
+      setGroupByColumn(defaultGroupCol);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить лист");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -77,7 +109,7 @@ function ConverterContent() {
     setLoading(true);
 
     try {
-      const data = await converterProcess(groupByColumn, columnRules);
+      const data = await converterProcess(groupByColumn, columnRules, selectedSheet);
       setResult(data);
       setStep("result");
     } catch (err: unknown) {
@@ -92,7 +124,7 @@ function ConverterContent() {
     setLoading(true);
 
     try {
-      await converterDownload(groupByColumn, columnRules);
+      await converterDownload(groupByColumn, columnRules, selectedSheet);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Download failed");
     } finally {
@@ -187,10 +219,29 @@ function ConverterContent() {
       {/* Step 2: Configure */}
       {step === "configure" && preview && (
         <div className="converter-step">
+          {/* Sheet Selection */}
+          {preview.sheets && preview.sheets.length > 1 && (
+            <div className="converter-section" style={{ marginBottom: "var(--space-md)", paddingBottom: "var(--space-md)", borderBottom: "1px solid var(--border-color)" }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">📄 Выберите лист Excel для обработки:</label>
+                <select
+                  className="form-input"
+                  value={selectedSheet}
+                  onChange={(e) => handleSheetChange(e.target.value)}
+                  disabled={loading}
+                >
+                  {preview.sheets.map((sheet) => (
+                    <option key={sheet} value={sheet}>{sheet}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Input preview */}
           <div className="converter-section">
             <h3 className="converter-section__title">
-              📋 Входные данные: {fileName}
+              📋 Лист: {selectedSheet || fileName}
               <span className="converter-section__count">{preview.row_count} строк</span>
             </h3>
             <div className="data-table-wrapper">

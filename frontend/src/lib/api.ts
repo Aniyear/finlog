@@ -257,22 +257,32 @@ export async function converterPreview(file: File): Promise<ConverterPreview> {
   return res.json();
 }
 
+export async function converterPreviewStored(sheetName: string): Promise<ConverterPreview> {
+  return request<ConverterPreview>("/converter/preview-stored", {
+    method: "POST",
+    body: JSON.stringify({ sheet_name: sheetName }),
+  });
+}
+
 export async function converterProcess(
   groupByColumn: string,
-  columnRules: Record<string, string>
+  columnRules: Record<string, string>,
+  sheetName?: string
 ): Promise<ConverterProcessResult> {
   return request<ConverterProcessResult>("/converter/process", {
     method: "POST",
     body: JSON.stringify({
       group_by_column: groupByColumn,
       column_rules: columnRules,
+      sheet_name: sheetName,
     }),
   });
 }
 
 export async function converterDownload(
   groupByColumn: string,
-  columnRules: Record<string, string>
+  columnRules: Record<string, string>,
+  sheetName?: string
 ): Promise<void> {
   const authHeaders = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/converter/download`, {
@@ -284,6 +294,7 @@ export async function converterDownload(
     body: JSON.stringify({
       group_by_column: groupByColumn,
       column_rules: columnRules,
+      sheet_name: sheetName,
     }),
   });
 

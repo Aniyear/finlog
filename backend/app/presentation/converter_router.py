@@ -22,6 +22,8 @@ MODULE_ID = "excel_converter"
 # --- Schemas ---
 
 class PreviewResponse(BaseModel):
+    sheets: list[str]
+    current_sheet: str
     columns: list[str]
     sample_rows: list[list[str]]
     row_count: int
@@ -31,6 +33,10 @@ class PreviewResponse(BaseModel):
 class ProcessRequest(BaseModel):
     group_by_column: str
     column_rules: dict[str, str]  # {"col": "sum" | "unique_join" | "first" | "count" | "skip"}
+    sheet_name: str | None = None
+
+class PreviewStoredRequest(BaseModel):
+    sheet_name: str
 
 
 class ProcessResponse(BaseModel):
@@ -96,6 +102,27 @@ async def preview_input(
     return PreviewResponse(**result)
 
 
+@router.post("/preview-stored", response_model=PreviewResponse)
+async def preview_stored_file(
+    body: PreviewStoredRequest,
+    user: UserProfileModel = Depends(require_module(MODULE_ID)),
+):
+    """Preview a different sheet of the previously uploaded file without re-uploading."""
+    file_bytes = _get_file(str(user.id))
+    if file_bytes is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No file uploaded. Please upload a file first via /converter/preview",
+        )
+
+    try:
+        result = ExcelConverterService.preview_input(file_bytes, sheet_name=body.sheet_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    return PreviewResponse(**result)
+
+
 @router.post("/process", response_model=ProcessResponse)
 async def process_file(
     body: ProcessRequest,
@@ -114,6 +141,7 @@ async def process_file(
             file_bytes=file_bytes,
             group_by_column=body.group_by_column,
             column_rules=body.column_rules,
+            sheet_name=body.sheet_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -144,6 +172,7 @@ async def download_result(
             file_bytes=file_bytes,
             group_by_column=body.group_by_column,
             column_rules=body.column_rules,
+            sheet_name=body.sheet_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

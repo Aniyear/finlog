@@ -15,6 +15,7 @@ import type {
   UserModule,
   ConverterPreview,
   ConverterProcessResult,
+  AggregationRule,
 } from "@/types";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -238,10 +239,11 @@ export async function createUserProfile(data: {
 
 // --- Excel Converter ---
 
-export async function converterPreview(file: File): Promise<ConverterPreview> {
+export async function converterPreview(file: File, sheetName?: string): Promise<ConverterPreview> {
   const authHeaders = await getAuthHeaders();
   const formData = new FormData();
   formData.append("file", file);
+  if (sheetName) formData.append("sheet_name", sheetName);
 
   const res = await fetch(`${API_BASE}/converter/preview`, {
     method: "POST",
@@ -257,45 +259,50 @@ export async function converterPreview(file: File): Promise<ConverterPreview> {
   return res.json();
 }
 
-export async function converterPreviewStored(sheetName: string): Promise<ConverterPreview> {
-  return request<ConverterPreview>("/converter/preview-stored", {
-    method: "POST",
-    body: JSON.stringify({ sheet_name: sheetName }),
-  });
-}
-
 export async function converterProcess(
+  file: File,
   groupByColumn: string,
   columnRules: Record<string, string>,
   sheetName?: string
 ): Promise<ConverterProcessResult> {
-  return request<ConverterProcessResult>("/converter/process", {
+  const authHeaders = await getAuthHeaders();
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("group_by_column", groupByColumn);
+  formData.append("column_rules", JSON.stringify(columnRules));
+  if (sheetName) formData.append("sheet_name", sheetName);
+
+  const res = await fetch(`${API_BASE}/converter/process`, {
     method: "POST",
-    body: JSON.stringify({
-      group_by_column: groupByColumn,
-      column_rules: columnRules,
-      sheet_name: sheetName,
-    }),
+    headers: authHeaders,
+    body: formData,
   });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Process error: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 export async function converterDownload(
+  file: File,
   groupByColumn: string,
   columnRules: Record<string, string>,
   sheetName?: string
 ): Promise<void> {
   const authHeaders = await getAuthHeaders();
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("group_by_column", groupByColumn);
+  formData.append("column_rules", JSON.stringify(columnRules));
+  if (sheetName) formData.append("sheet_name", sheetName);
+
   const res = await fetch(`${API_BASE}/converter/download`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-    },
-    body: JSON.stringify({
-      group_by_column: groupByColumn,
-      column_rules: columnRules,
-      sheet_name: sheetName,
-    }),
+    headers: authHeaders,
+    body: formData,
   });
 
   if (!res.ok) {
@@ -306,14 +313,14 @@ export async function converterDownload(
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
+  const disposition = res.headers.get("Content-Disposition");
+  const filename = disposition
+    ? decodeURIComponent(disposition.split("filename*=UTF-8''")[1] || "grouped_result.xlsx")
+    : "grouped_result.xlsx";
   a.href = url;
-  a.download = "grouped_result.xlsx";
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-export async function converterClear(): Promise<void> {
-  return request<void>("/converter/clear", { method: "DELETE" });
 }

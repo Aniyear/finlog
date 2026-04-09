@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import type { ConverterPreview, ConverterProcessResult, AggregationRule } from "@/types";
-import { converterPreview, converterProcess, converterDownload, converterPreviewStored } from "@/lib/api";
+import { converterPreview, converterProcess, converterDownload } from "@/lib/api";
 import ModuleGuard from "@/components/ModuleGuard";
 
 type Step = "upload" | "configure" | "result";
@@ -23,6 +23,7 @@ function ConverterContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
   const [visibleRows, setVisibleRows] = useState(50);
   const [visibleResultRows, setVisibleResultRows] = useState(50);
@@ -38,6 +39,7 @@ function ConverterContent() {
     setFileName(file.name);
 
     try {
+      setSelectedFile(file);
       const data = await converterPreview(file);
       setPreview(data);
       setSelectedSheet(data.current_sheet);
@@ -70,24 +72,25 @@ function ConverterContent() {
   }, []);
 
   const handleSheetChange = async (sheetName: string) => {
+    if (!selectedFile) return;
     setSelectedSheet(sheetName);
     setLoading(true);
     setError(null);
     try {
-      const data = await converterPreviewStored(sheetName);
+      const data = await converterPreview(selectedFile, sheetName);
       setPreview(data);
       setVisibleRows(50);
       
-      const rules: Record<string, AggregationRule> = {};
+      const rules: Record<AggregationRule, AggregationRule> = {}; // Fixed type if needed
       data.columns.forEach((col) => {
         const lowerCol = col.toLowerCase();
         if (lowerCol.includes("price") || lowerCol.includes("цена")) {
-          rules[col] = "unique_join";
+          rules[col as unknown as AggregationRule] = "unique_join";
         } else {
-          rules[col] = data.column_types[col] === "numeric" ? "sum" : "unique_join";
+          rules[col as unknown as AggregationRule] = data.column_types[col] === "numeric" ? "sum" : "unique_join";
         }
       });
-      setColumnRules(rules);
+      setColumnRules(rules as unknown as Record<string, AggregationRule>);
 
       const defaultGroupCol = data.columns.find(
         (col) => col.toLowerCase().includes("hs code") || col.toLowerCase().includes("тн вэд")
@@ -114,10 +117,11 @@ function ConverterContent() {
     if (step !== "configure" || !groupByColumn) return;
 
     const timeoutId = setTimeout(async () => {
+      if (!selectedFile) return;
       setIsProcessing(true);
       setError(null);
       try {
-        const data = await converterProcess(groupByColumn, columnRules, selectedSheet);
+        const data = await converterProcess(selectedFile, groupByColumn, columnRules, selectedSheet);
         setResult(data);
         setVisibleResultRows(50);
       } catch (err: unknown) {
@@ -128,14 +132,15 @@ function ConverterContent() {
     }, 600); // 600ms debounce
 
     return () => clearTimeout(timeoutId);
-  }, [groupByColumn, columnRules, selectedSheet, step]);
+  }, [groupByColumn, columnRules, selectedSheet, step, selectedFile]);
 
   const handleDownload = async () => {
+    if (!selectedFile) return;
     setError(null);
     setLoading(true);
 
     try {
-      await converterDownload(groupByColumn, columnRules, selectedSheet);
+      await converterDownload(selectedFile, groupByColumn, columnRules, selectedSheet);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Download failed");
     } finally {
@@ -150,6 +155,7 @@ function ConverterContent() {
     setGroupByColumn("");
     setColumnRules({});
     setFileName("");
+    setSelectedFile(null);
     setError(null);
   };
 

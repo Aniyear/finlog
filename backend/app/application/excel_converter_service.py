@@ -55,6 +55,16 @@ class ExcelConverterService:
     """In-memory Excel grouping engine."""
 
     @staticmethod
+    def _clean_header(name: Any) -> str:
+        """Sanitize header name: remove newlines, collapse spaces, and strip."""
+        if name is None:
+            return ""
+        # Replace newlines and tabs with spaces
+        s = str(name).replace("\n", " ").replace("\t", " ")
+        # Collapse multiple spaces into one
+        return " ".join(s.split()).strip()
+
+    @staticmethod
     def preview_input(file_bytes: bytes, sheet_name: str | None = None) -> dict:
         """
         Parse Excel and return preview data.
@@ -95,7 +105,10 @@ class ExcelConverterService:
             raise ValueError("File must have at least a header row and one data row")
 
         # First row = headers
-        headers = [str(cell) if cell is not None else f"Column_{i+1}" for i, cell in enumerate(rows[0])]
+        headers = [
+            ExcelConverterService._clean_header(cell) if cell is not None else f"Column_{i+1}"
+            for i, cell in enumerate(rows[0])
+        ]
 
         # Data rows
         data_rows = rows[1:]
@@ -186,7 +199,10 @@ class ExcelConverterService:
         if len(rows) < 2:
             raise ValueError("File must have at least a header row and one data row")
 
-        headers = [str(cell) if cell is not None else f"Column_{i+1}" for i, cell in enumerate(rows[0])]
+        headers = [
+            ExcelConverterService._clean_header(cell) if cell is not None else f"Column_{i+1}"
+            for i, cell in enumerate(rows[0])
+        ]
         data_rows = rows[1:]
 
         if group_by_column not in headers:

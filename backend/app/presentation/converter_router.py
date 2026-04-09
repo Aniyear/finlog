@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import urllib.parse
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response
 from pydantic import BaseModel
 
 from app.infrastructure.auth_middleware import require_module
@@ -30,15 +30,6 @@ class PreviewResponse(BaseModel):
     column_types: dict[str, str]
 
 
-class ProcessRequest(BaseModel):
-    group_by_column: str
-    column_rules: dict[str, str]  # {"col": "sum" | "unique_join" | "first" | "count" | "skip"}
-    sheet_name: str | None = None
-
-class PreviewStoredRequest(BaseModel):
-    sheet_name: str
-
-
 class ProcessResponse(BaseModel):
     columns: list[str]
     preview_rows: list[list]
@@ -46,38 +37,12 @@ class ProcessResponse(BaseModel):
     grouped_count: int
 
 
-# --- In-memory file storage (per-request, cleaned up automatically) ---
-# We store the last uploaded file bytes in a simple dict keyed by user ID.
-# This avoids re-uploading for process/download after preview.
-_user_files: dict[str, bytes] = {}
-
-MAX_STORED_FILES = 50  # Prevent memory leak
-
-
-def _store_file(user_id: str, file_bytes: bytes) -> None:
-    """Store file bytes for a user, evicting oldest if needed."""
-    if len(_user_files) >= MAX_STORED_FILES:
-        # Remove oldest entry
-        oldest_key = next(iter(_user_files))
-        del _user_files[oldest_key]
-    _user_files[user_id] = file_bytes
-
-
-def _get_file(user_id: str) -> bytes | None:
-    """Get stored file bytes for a user."""
-    return _user_files.get(user_id)
-
-
-def _clear_file(user_id: str) -> None:
-    """Clear stored file for a user."""
-    _user_files.pop(user_id, None)
-
-
 # --- Endpoints ---
 
 @router.post("/preview", response_model=PreviewResponse)
 async def preview_input(
     file: UploadFile = File(...),
+    sheet_name: str | None = Form(None),
     user: UserProfileModel = Depends(require_module(MODULE_ID)),
 ):
     """Upload Excel file and return column info + preview data."""
@@ -92,31 +57,7 @@ async def preview_input(
         raise HTTPException(status_code=400, detail="Empty file")
 
     try:
-        result = ExcelConverterService.preview_input(file_bytes)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    # Store for later processing
-    _store_file(str(user.id), file_bytes)
-
-    return PreviewResponse(**result)
-
-
-@router.post("/preview-stored", response_model=PreviewResponse)
-async def preview_stored_file(
-    body: PreviewStoredRequest,
-    user: UserProfileModel = Depends(require_module(MODULE_ID)),
-):
-    """Preview a different sheet of the previously uploaded file without re-uploading."""
-    file_bytes = _get_file(str(user.id))
-    if file_bytes is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No file uploaded. Please upload a file first via /converter/preview",
-        )
-
-    try:
-        result = ExcelConverterService.preview_input(file_bytes, sheet_name=body.sheet_name)
+        result = ExcelConverterService.preview_input(file_bytes, sheet_name=sheet_name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -125,23 +66,26 @@ async def preview_stored_file(
 
 @router.post("/process", response_model=ProcessResponse)
 async def process_file(
-    body: ProcessRequest,
+    file: UploadFile = File(...),
+    group_by_column: str = Form(...),
+    column_rules: str = Form(...),  # JSON string
+    sheet_name: str | None = Form(None),
     user: UserProfileModel = Depends(require_module(MODULE_ID)),
 ):
-    """Process the previously uploaded file with grouping rules."""
-    file_bytes = _get_file(str(user.id))
-    if file_bytes is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No file uploaded. Please upload a file first via /converter/preview",
-        )
+    """Process an uploaded file with grouping rules (Stateless)."""
+    import json
+    try:
+        rules_dict = json.loads(column_rules)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON in column_rules")
 
+    file_bytes = await file.read()
     try:
         result = ExcelConverterService.process(
             file_bytes=file_bytes,
-            group_by_column=body.group_by_column,
-            column_rules=body.column_rules,
-            sheet_name=body.sheet_name,
+            group_by_column=group_by_column,
+            column_rules=rules_dict,
+            sheet_name=sheet_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -156,23 +100,26 @@ async def process_file(
 
 @router.post("/download")
 async def download_result(
-    body: ProcessRequest,
+    file: UploadFile = File(...),
+    group_by_column: str = Form(...),
+    column_rules: str = Form(...),  # JSON string
+    sheet_name: str | None = Form(None),
     user: UserProfileModel = Depends(require_module(MODULE_ID)),
 ):
-    """Process and download the grouped Excel file."""
-    file_bytes = _get_file(str(user.id))
-    if file_bytes is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No file uploaded. Please upload a file first via /converter/preview",
-        )
+    """Process and download the grouped Excel file (Stateless)."""
+    import json
+    try:
+        rules_dict = json.loads(column_rules)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON in column_rules")
 
+    file_bytes = await file.read()
     try:
         result = ExcelConverterService.process(
             file_bytes=file_bytes,
-            group_by_column=body.group_by_column,
-            column_rules=body.column_rules,
-            sheet_name=body.sheet_name,
+            group_by_column=group_by_column,
+            column_rules=rules_dict,
+            sheet_name=sheet_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -182,9 +129,6 @@ async def download_result(
         columns=result["columns"],
         rows=result["grouped_rows"],
     )
-
-    # Clean up stored file
-    _clear_file(str(user.id))
 
     filename = "grouped_result.xlsx"
     encoded_filename = urllib.parse.quote(filename)
@@ -197,12 +141,3 @@ async def download_result(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=headers,
     )
-
-
-@router.delete("/clear")
-async def clear_uploaded_file(
-    user: UserProfileModel = Depends(require_module(MODULE_ID)),
-):
-    """Clear the stored uploaded file for the current user."""
-    _clear_file(str(user.id))
-    return {"status": "cleared"}

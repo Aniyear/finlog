@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.broker_service import BrokerService
 from app.application.transaction_service import TransactionService
 from app.infrastructure.database import get_session
+from app.infrastructure.auth_middleware import require_module
+from app.infrastructure.models import UserProfileModel
 
 router = APIRouter(prefix="/brokers", tags=["Brokers"])
 
@@ -34,7 +36,10 @@ class BrokerResponse(BaseModel):
 # --- Endpoints ---
 
 @router.get("", response_model=list[BrokerResponse])
-async def list_brokers(session: AsyncSession = Depends(get_session)):
+async def list_brokers(
+    session: AsyncSession = Depends(get_session),
+    user: UserProfileModel = Depends(require_module("debt_management")),
+):
     """Return all brokers with their current debt."""
     service = BrokerService(session)
     tx_service = TransactionService(session)
@@ -57,6 +62,7 @@ async def list_brokers(session: AsyncSession = Depends(get_session)):
 @router.post("", response_model=BrokerResponse, status_code=201)
 async def create_broker(
     body: BrokerCreate,
+    user: UserProfileModel = Depends(require_module("debt_management")),
     session: AsyncSession = Depends(get_session),
 ):
     """Create a new broker."""
@@ -73,6 +79,7 @@ async def create_broker(
 @router.delete("/{broker_id}", status_code=204)
 async def delete_broker(
     broker_id: UUID,
+    user: UserProfileModel = Depends(require_module("debt_management")),
     session: AsyncSession = Depends(get_session),
 ):
     """Delete a broker and all associated transactions."""

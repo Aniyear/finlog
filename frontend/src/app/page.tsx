@@ -1,58 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Broker } from "@/types";
-import { getBrokers, createBroker, deleteBroker } from "@/lib/api";
-import BrokerCard from "@/components/BrokerCard";
+import { useAuth } from "@/components/AuthProvider";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import Link from "next/link";
+
+/** Route map for each module */
+const MODULE_ROUTES: Record<string, string> = {
+  debt_management: "/modules/debt-management",
+  excel_converter: "/modules/excel-converter",
+};
 
 export default function HomePage() {
-  const [brokers, setBrokers] = useState<Broker[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { profile, loading, signOut, user } = useAuth();
+  const router = useRouter();
 
-  const fetchBrokers = async () => {
-    try {
-      setLoading(true);
-      const data = await getBrokers();
-      setBrokers(data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load brokers");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Redirect to login if not authenticated
   useEffect(() => {
-    fetchBrokers();
-  }, []);
-
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
-    try {
-      setCreating(true);
-      await createBroker(newName.trim());
-      setNewName("");
-      setShowAdd(false);
-      await fetchBrokers();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create broker");
-    } finally {
-      setCreating(false);
+    if (!loading && !user) {
+      router.replace("/login");
     }
-  };
+  }, [loading, user, router]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Удалить декларанта и все его операции?")) return;
-    try {
-      await deleteBroker(id);
-      await fetchBrokers();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to delete broker");
-    }
-  };
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="loading-screen">
+          <span className="spinner" />
+          <span>Загрузка...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  const userModules = profile.modules || [];
 
   return (
     <div className="container">
@@ -63,106 +46,79 @@ export default function HomePage() {
             <div className="header__logo-icon">📊</div>
             <div>
               <div className="header__title">FinLog</div>
-              <div className="header__subtitle">Учёт задолженностей</div>
+              <div className="header__subtitle">Финансовая платформа</div>
             </div>
-            <button 
-              className="btn btn--ghost btn--sm" 
-              onClick={() => window.location.reload()} 
-              title="Обновить страницу"
-              style={{ padding: '8px', minWidth: 'auto', borderRadius: '50%', color: 'var(--accent)' }}
+          </div>
+          <div className="header__actions">
+            <div className="header__user">
+              <span className="header__user-name">
+                {profile.display_name}
+              </span>
+              <span className="header__user-role">
+                {profile.role === "admin" ? "Админ" : "Пользователь"}
+              </span>
+            </div>
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={signOut}
+              id="logout-btn"
             >
-              🔄
+              Выйти
             </button>
           </div>
-          <button
-            className="btn btn--primary"
-            onClick={() => setShowAdd(true)}
-            id="add-broker-btn"
-          >
-            + Декларант
-          </button>
         </div>
       </header>
 
-      {/* Error toast */}
-      {error && (
-        <div className="toast toast--error" onClick={() => setError(null)}>
-          {error}
-        </div>
-      )}
+      {/* Module Grid */}
+      <section>
+        <h2 style={{ marginBottom: "var(--space-lg)" }}>Ваши модули</h2>
 
-      {/* Add Broker Modal */}
-      {showAdd && (
-        <div className="modal-overlay" onClick={() => setShowAdd(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal__header">
-              <h2 className="modal__title">Новый декларант</h2>
-              <button
-                className="modal__close"
-                onClick={() => setShowAdd(false)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="broker-name-input">
-                Имя
-              </label>
-              <input
-                id="broker-name-input"
-                className="form-input"
-                type="text"
-                placeholder="Введите имя декларанта"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                autoFocus
-              />
-            </div>
-            <div className="modal__actions">
-              <button
-                className="btn btn--ghost"
-                onClick={() => setShowAdd(false)}
-              >
-                Отмена
-              </button>
-              <button
-                className="btn btn--primary"
-                onClick={handleCreate}
-                disabled={creating || !newName.trim()}
-                id="confirm-add-broker-btn"
-              >
-                {creating ? <span className="spinner" /> : "Создать"}
-              </button>
-            </div>
+        {userModules.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state__icon">🔒</div>
+            <p className="empty-state__text">
+              Нет доступных модулей. Обратитесь к администратору.
+            </p>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="module-grid">
+            {userModules.map((mod) => (
+              <Link
+                key={mod.id}
+                href={MODULE_ROUTES[mod.id] || "#"}
+                className="module-card"
+                id={`module-${mod.id}`}
+              >
+                <div className="module-card__icon">
+                  {mod.icon || "📦"}
+                </div>
+                <div className="module-card__info">
+                  <div className="module-card__name">{mod.name}</div>
+                  <div className="module-card__desc">
+                    {mod.description || ""}
+                  </div>
+                </div>
+                <div className="module-card__arrow">→</div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
 
-      {/* Content */}
-      {loading ? (
-        <div className="loading-screen">
-          <span className="spinner" />
-          <span>Загрузка...</span>
-        </div>
-      ) : brokers.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state__icon">📋</div>
-          <p className="empty-state__text">
-            Нет декларантов. Нажмите «+ Декларант» чтобы добавить.
-          </p>
-        </div>
-      ) : (
-        <div className="broker-grid">
-          {brokers.map((broker, i) => (
-            <BrokerCard
-              key={broker.id}
-              broker={broker}
-              index={i}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
+      {/* Admin link */}
+      {profile.role === "admin" && (
+        <section style={{ marginTop: "var(--space-2xl)" }}>
+          <Link href="/admin" className="module-card module-card--admin" id="admin-panel-link">
+            <div className="module-card__icon">⚙️</div>
+            <div className="module-card__info">
+              <div className="module-card__name">Админ-панель</div>
+              <div className="module-card__desc">
+                Управление пользователями и модулями
+              </div>
+            </div>
+            <div className="module-card__arrow">→</div>
+          </Link>
+        </section>
       )}
     </div>
   );

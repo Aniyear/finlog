@@ -12,6 +12,9 @@ from app.infrastructure.database import init_db
 from app.presentation.broker_router import router as broker_router
 from app.presentation.transaction_router import router as transaction_router
 from app.presentation.receipt_router import router as receipt_router
+from app.presentation.auth_router import router as auth_router
+from app.presentation.admin_router import router as admin_router
+from app.presentation.converter_router import router as converter_router
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +35,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="FinLog API",
-    description="API for tracking declarant debts",
-    version="2.0.0",
+    description="Modular financial management platform",
+    version="2.1.0",
     lifespan=lifespan,
 )
 
@@ -47,12 +50,18 @@ app.add_middleware(
 )
 
 # Register routers
+# Auth & Admin
+app.include_router(auth_router)
+app.include_router(admin_router)
+
+# Modules
 app.include_router(broker_router)
 app.include_router(transaction_router)
 app.include_router(receipt_router)
+app.include_router(converter_router)
 
 
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint."""
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": "2.1.0"}

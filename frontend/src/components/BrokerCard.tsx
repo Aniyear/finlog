@@ -33,7 +33,7 @@ export default function BrokerCard({ broker, index, onDelete }: Props) {
     : "Долг";
 
   return (
-    <Link href={`/brokers/${broker.id}`} style={{ textDecoration: "none" }}>
+    <Link href={`/modules/debt-management/brokers/${broker.id}`} style={{ textDecoration: "none" }}>
       <div
         className="card broker-card animate-in"
         style={{ animationDelay: `${index * 0.05}s` }}

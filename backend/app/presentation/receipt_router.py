@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 
 import logging
 from app.application.receipt_parser_service import ReceiptParserService
+from app.infrastructure.auth_middleware import require_module
+from app.infrastructure.models import UserProfileModel
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,10 @@ class ReceiptParseResponse(BaseModel):
 # --- Endpoints ---
 
 @router.post("/upload", response_model=ReceiptParseResponse)
-async def upload_receipt(file: UploadFile = File(...)):
+async def upload_receipt(
+    file: UploadFile = File(...),
+    user: UserProfileModel = Depends(require_module("debt_management")),
+):
     """Upload a PDF receipt, extract text, and parse structured data.
 
     Returns parsed preview for user review before saving.
@@ -80,7 +85,10 @@ async def upload_receipt(file: UploadFile = File(...)):
     )
 
 @router.post("/bulk_upload", response_model=list[ReceiptParseResponse])
-async def bulk_upload_receipts(files: list[UploadFile] = File(...)):
+async def bulk_upload_receipts(
+    files: list[UploadFile] = File(...),
+    user: UserProfileModel = Depends(require_module("debt_management")),
+):
     """Upload multiple PDF receipts and parse them sequentially."""
     responses = []
     logger.info(f"Received bulk upload request with {len(files)} files")

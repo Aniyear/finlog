@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.transaction_service import TransactionService
 from app.infrastructure.database import get_session
+from app.infrastructure.auth_middleware import require_module
+from app.infrastructure.models import UserProfileModel as AuthUserModel
 
 router = APIRouter(tags=["Transactions"])
 
@@ -66,6 +68,7 @@ class DebtResponse(BaseModel):
 @router.get("/brokers/{broker_id}/transactions", response_model=list[TransactionResponse])
 async def list_transactions(
     broker_id: UUID,
+    auth_user: AuthUserModel = Depends(require_module("debt_management")),
     session: AsyncSession = Depends(get_session),
 ):
     """Return all transactions for a broker."""
@@ -96,6 +99,7 @@ async def list_transactions(
 @router.get("/brokers/{broker_id}/debt", response_model=DebtResponse)
 async def get_debt(
     broker_id: UUID,
+    auth_user: AuthUserModel = Depends(require_module("debt_management")),
     session: AsyncSession = Depends(get_session),
 ):
     """Return current debt for a broker."""
@@ -111,6 +115,7 @@ async def get_debt(
 @router.post("/transactions", response_model=TransactionResponse, status_code=201)
 async def create_transaction(
     body: TransactionCreate,
+    auth_user: AuthUserModel = Depends(require_module("debt_management")),
     session: AsyncSession = Depends(get_session),
 ):
     """Create a new transaction."""
@@ -139,6 +144,7 @@ async def create_transaction(
 @router.post("/transactions/bulk", response_model=list[TransactionResponse], status_code=201)
 async def create_transactions_bulk(
     body: list[TransactionCreate],
+    auth_user: AuthUserModel = Depends(require_module("debt_management")),
     session: AsyncSession = Depends(get_session),
 ):
     """Create multiple transactions in bulk."""
@@ -169,6 +175,7 @@ async def create_transactions_bulk(
 @router.delete("/transactions/{transaction_id}", status_code=204)
 async def delete_transaction(
     transaction_id: UUID,
+    auth_user: AuthUserModel = Depends(require_module("debt_management")),
     session: AsyncSession = Depends(get_session),
 ):
     """Delete a transaction."""
@@ -181,6 +188,7 @@ async def delete_transaction(
 @router.get("/brokers/{broker_id}/export")
 async def export_transactions_excel(
     broker_id: UUID,
+    auth_user: AuthUserModel = Depends(require_module("debt_management")),
     session: AsyncSession = Depends(get_session),
 ):
     """Export all transactions for a broker to an Excel file."""

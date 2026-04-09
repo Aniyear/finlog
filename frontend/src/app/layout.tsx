@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AuthProvider from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "FinLog — Учёт задолженностей",
-  description: "PWA-приложение для учёта задолженностей декларантов",
+  title: "FinLog — Финансовая платформа",
+  description: "PWA-приложение для финансового учёта и управления",
   manifest: "/manifest.json",
   icons: {
     icon: "/icons/icon-192.png",
@@ -54,7 +55,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         <ServiceWorkerRegistration />
       </body>
     </html>

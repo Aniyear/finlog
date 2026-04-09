@@ -2,6 +2,56 @@
  * TypeScript types for FinLog application.
  */
 
+// --- Auth & Users ---
+
+export interface UserModule {
+  id: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+}
+
+export interface UserProfile {
+  id: string;
+  auth_id: string;
+  email: string;
+  display_name: string;
+  role: "admin" | "user";
+  is_active: boolean;
+  modules: UserModule[];
+  created_at: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  display_name: string;
+  role: string;
+  is_active: boolean;
+  modules: string[];
+  created_at: string;
+}
+
+export interface AdminUserDetail {
+  id: string;
+  auth_id: string;
+  email: string;
+  display_name: string;
+  role: string;
+  is_active: boolean;
+  modules: UserModule[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminStats {
+  total_users: number;
+  active_users: number;
+  total_modules: number;
+}
+
+// --- Debt Management Module ---
+
 export interface Broker {
   id: string;
   name: string;
@@ -63,3 +113,21 @@ export interface DebtInfo {
   debt: number;
   is_overpayment: boolean;
 }
+
+// --- Excel Converter Module ---
+
+export interface ConverterPreview {
+  columns: string[];
+  sample_rows: string[][];
+  row_count: number;
+  column_types: Record<string, "text" | "numeric">;
+}
+
+export interface ConverterProcessResult {
+  columns: string[];
+  preview_rows: (string | number)[][];
+  original_count: number;
+  grouped_count: number;
+}
+
+export type AggregationRule = "sum" | "unique_join" | "first" | "count" | "skip";

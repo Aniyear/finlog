@@ -98,3 +98,84 @@ class TransactionModel(Base):
 
     def __repr__(self) -> str:
         return f"<Transaction(id={self.id}, type={self.type}, amount={self.amount})>"
+
+
+class ModuleModel(Base):
+    """ORM model for the modules table."""
+
+    __tablename__ = "modules"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    icon: Mapped[str | None] = mapped_column(String(10))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=get_now_tz
+    )
+
+    def __repr__(self) -> str:
+        return f"<Module(id={self.id!r}, name={self.name!r})>"
+
+
+class UserProfileModel(Base):
+    """ORM model for the user_profiles table."""
+
+    __tablename__ = "user_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    auth_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), unique=True, nullable=False
+    )
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=get_now_tz
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=get_now_tz, onupdate=get_now_tz
+    )
+
+    module_access: Mapped[list["UserModuleAccessModel"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", foreign_keys="[UserModuleAccessModel.user_id]"
+    )
+
+    def __repr__(self) -> str:
+        return f"<UserProfile(id={self.id}, email={self.email!r}, role={self.role!r})>"
+
+
+class UserModuleAccessModel(Base):
+    """ORM model for the user_module_access table."""
+
+    __tablename__ = "user_module_access"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("user_profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    module_id: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("modules.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    granted_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=get_now_tz
+    )
+    granted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("user_profiles.id"),
+        nullable=True,
+    )
+
+    user: Mapped["UserProfileModel"] = relationship(
+        back_populates="module_access", foreign_keys=[user_id]
+    )
+    module: Mapped["ModuleModel"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<UserModuleAccess(user={self.user_id}, module={self.module_id!r})>"

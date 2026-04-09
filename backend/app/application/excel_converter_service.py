@@ -19,7 +19,7 @@ from openpyxl.utils import get_column_letter
 logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
-MAX_PREVIEW_ROWS = 30
+MAX_PREVIEW_ROWS = 500
 
 
 def _is_numeric(value: Any) -> bool:
@@ -276,10 +276,10 @@ class ExcelConverterService:
         header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
         header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         thin_border = Border(
-            left=Side(style="thin", color="D1D5DB"),
-            right=Side(style="thin", color="D1D5DB"),
-            top=Side(style="thin", color="D1D5DB"),
-            bottom=Side(style="thin", color="D1D5DB"),
+            left=Side(style="thin", color="9CA3AF"),
+            right=Side(style="thin", color="9CA3AF"),
+            top=Side(style="thin", color="9CA3AF"),
+            bottom=Side(style="thin", color="9CA3AF"),
         )
         data_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 

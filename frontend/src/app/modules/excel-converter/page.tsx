@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import type { ConverterPreview, ConverterProcessResult, AggregationRule } from "@/types";
 import { converterPreview, converterProcess, converterDownload, converterPreviewStored } from "@/lib/api";
@@ -24,10 +24,13 @@ function ConverterContent() {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [selectedSheet, setSelectedSheet] = useState<string>("");
+  const [visibleRows, setVisibleRows] = useState(50);
+  const [visibleResultRows, setVisibleResultRows] = useState(50);
 
   // Configuration
   const [groupByColumn, setGroupByColumn] = useState<string>("");
   const [columnRules, setColumnRules] = useState<Record<string, AggregationRule>>({});
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleFileUpload = useCallback(async (file: File) => {
     setError(null);
@@ -38,6 +41,7 @@ function ConverterContent() {
       const data = await converterPreview(file);
       setPreview(data);
       setSelectedSheet(data.current_sheet);
+      setVisibleRows(50);
 
       // Auto-configure rules based on detected types
       const rules: Record<string, AggregationRule> = {};
@@ -72,6 +76,7 @@ function ConverterContent() {
     try {
       const data = await converterPreviewStored(sheetName);
       setPreview(data);
+      setVisibleRows(50);
       
       const rules: Record<string, AggregationRule> = {};
       data.columns.forEach((col) => {
@@ -104,20 +109,26 @@ function ConverterContent() {
     [handleFileUpload]
   );
 
-  const handleProcess = async () => {
-    setError(null);
-    setLoading(true);
+  // Auto-process on configuration change
+  useEffect(() => {
+    if (step !== "configure" || !groupByColumn) return;
 
-    try {
-      const data = await converterProcess(groupByColumn, columnRules, selectedSheet);
-      setResult(data);
-      setStep("result");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Processing failed");
-    } finally {
-      setLoading(false);
-    }
-  };
+    const timeoutId = setTimeout(async () => {
+      setIsProcessing(true);
+      setError(null);
+      try {
+        const data = await converterProcess(groupByColumn, columnRules, selectedSheet);
+        setResult(data);
+        setVisibleResultRows(50);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Ошибка автоматической обработки");
+      } finally {
+        setIsProcessing(false);
+      }
+    }, 600); // 600ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [groupByColumn, columnRules, selectedSheet, step]);
 
   const handleDownload = async () => {
     setError(null);
@@ -216,7 +227,7 @@ function ConverterContent() {
         </div>
       )}
 
-      {/* Step 2: Configure */}
+      {/* Step 2: Configure & Results (Unified) */}
       {step === "configure" && preview && (
         <div className="converter-step">
           {/* Sheet Selection */}
@@ -228,7 +239,7 @@ function ConverterContent() {
                   className="form-input"
                   value={selectedSheet}
                   onChange={(e) => handleSheetChange(e.target.value)}
-                  disabled={loading}
+                  disabled={loading || isProcessing}
                 >
                   {preview.sheets.map((sheet) => (
                     <option key={sheet} value={sheet}>{sheet}</option>
@@ -254,7 +265,7 @@ function ConverterContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {preview.sample_rows.slice(0, 10).map((row, i) => (
+                  {preview.sample_rows.slice(0, visibleRows).map((row, i) => (
                     <tr key={i}>
                       {row.map((cell, j) => (
                         <td key={j}>{cell}</td>
@@ -264,11 +275,20 @@ function ConverterContent() {
                 </tbody>
               </table>
             </div>
-            {preview.row_count > 10 && (
-              <div className="data-table-more">
-                ... и ещё {preview.row_count - 10} строк
+            {preview.sample_rows.length > visibleRows ? (
+              <div style={{ textAlign: "center", marginTop: "var(--space-md)" }}>
+                <button
+                  className="btn btn--ghost"
+                  onClick={() => setVisibleRows((prev) => prev + 100)}
+                >
+                  ➕ Показать еще (+100 строк)
+                </button>
               </div>
-            )}
+            ) : preview.row_count > preview.sample_rows.length ? (
+              <div className="data-table-more">
+                ... предпросмотр ограничен первыми {preview.sample_rows.length} строками
+              </div>
+            ) : null}
           </div>
 
           {/* Configuration */}
@@ -282,6 +302,7 @@ function ConverterContent() {
                 value={groupByColumn}
                 onChange={(e) => setGroupByColumn(e.target.value)}
                 id="group-by-select"
+                disabled={loading || isProcessing}
               >
                 {preview.columns.map((col) => (
                   <option key={col} value={col}>
@@ -311,6 +332,7 @@ function ConverterContent() {
                           [col]: e.target.value as AggregationRule,
                         }))
                       }
+                      disabled={loading || isProcessing}
                     >
                       {Object.entries(RULE_LABELS).map(([value, label]) => (
                         <option key={value} value={value}>
@@ -321,86 +343,91 @@ function ConverterContent() {
                   </div>
                 ))}
             </div>
-
-            <button
-              className="btn btn--primary btn--lg"
-              onClick={handleProcess}
-              disabled={loading || !groupByColumn}
-              style={{ marginTop: "var(--space-lg)" }}
-              id="process-btn"
-            >
-              {loading ? <span className="spinner" /> : "Обработать →"}
-            </button>
           </div>
-        </div>
-      )}
 
-      {/* Step 3: Result */}
-      {step === "result" && result && (
-        <div className="converter-step">
-          <div className="converter-section">
-            <h3 className="converter-section__title">
-              ✅ Результат
-            </h3>
-            <div className="converter-stats">
-              <div className="converter-stat">
-                <span className="converter-stat__label">Было строк</span>
-                <span className="converter-stat__value">{result.original_count}</span>
-              </div>
-              <div className="converter-stat converter-stat--arrow">→</div>
-              <div className="converter-stat">
-                <span className="converter-stat__label">Стало строк</span>
-                <span className="converter-stat__value converter-stat__value--success">
-                  {result.grouped_count}
-                </span>
-              </div>
-              <div className="converter-stat">
-                <span className="converter-stat__label">Сжатие</span>
-                <span className="converter-stat__value converter-stat__value--accent">
-                  {Math.round((1 - result.grouped_count / result.original_count) * 100)}%
-                </span>
-              </div>
+          {/* RESULTS SECTION (Below Configuration) */}
+          <div className="converter-section" style={{ borderTop: "2px solid var(--border-active)", paddingTop: "var(--space-xl)", marginTop: "var(--space-2xl)" }}>
+            <div className="converter-section__title">
+              <h3>✅ Предварительный результат</h3>
+              {isProcessing && <div className="spinner" style={{ width: 16, height: 16, marginLeft: "var(--space-sm)" }} />}
             </div>
 
-            <div className="data-table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    {result.columns.map((col) => (
-                      <th key={col}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.preview_rows.slice(0, 20).map((row, i) => (
-                    <tr key={i}>
-                      {row.map((cell, j) => (
-                        <td key={j}>{String(cell)}</td>
+            {result ? (
+              <>
+                <div className="converter-stats">
+                  <div className="converter-stat">
+                    <span className="converter-stat__label">Было строк</span>
+                    <span className="converter-stat__value">{result.original_count}</span>
+                  </div>
+                  <div className="converter-stat converter-stat--arrow">→</div>
+                  <div className="converter-stat">
+                    <span className="converter-stat__label">Стало строк</span>
+                    <span className="converter-stat__value converter-stat__value--success">
+                      {result.grouped_count}
+                    </span>
+                  </div>
+                  <div className="converter-stat">
+                    <span className="converter-stat__label">Сжатие</span>
+                    <span className="converter-stat__value converter-stat__value--accent">
+                      {Math.round((1 - result.grouped_count / result.original_count) * 100)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="data-table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        {result.columns.map((col) => (
+                          <th key={col}>{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody style={{ opacity: isProcessing ? 0.6 : 1, transition: "opacity 0.2s" }}>
+                      {result.preview_rows.slice(0, visibleResultRows).map((row, i) => (
+                        <tr key={i}>
+                          {row.map((cell, j) => (
+                            <td key={j}>{String(cell)}</td>
+                          ))}
+                        </tr>
                       ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {result.grouped_count > 20 && (
-              <div className="data-table-more">
-                ... и ещё {result.grouped_count - 20} строк
+                    </tbody>
+                  </table>
+                </div>
+
+                {result.preview_rows.length > visibleResultRows && (
+                  <div style={{ textAlign: "center", marginTop: "var(--space-md)" }}>
+                    <button
+                      className="btn btn--ghost"
+                      onClick={() => setVisibleResultRows((prev) => prev + 100)}
+                    >
+                      ➕ Показать еще (+100 строк)
+                    </button>
+                  </div>
+                )}
+
+                <div className="converter-actions" style={{ justifyContent: "flex-start", marginTop: "var(--space-xl)" }}>
+                  <button
+                    className="btn btn--primary btn--lg"
+                    onClick={handleDownload}
+                    disabled={loading || isProcessing}
+                    id="download-btn"
+                  >
+                    {loading ? <span className="spinner" /> : "📥 Скачать готовый Excel"}
+                  </button>
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginLeft: "var(--space-md)", fontStyle: "italic" }}>
+                    * Файл будет содержать все данные и полное форматирование
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="empty-state">
+                <div className="empty-state__icon">⏳</div>
+                <div className="empty-state__text">
+                  Выберите колонку для группировки, чтобы увидеть результат
+                </div>
               </div>
             )}
-          </div>
-
-          <div className="converter-actions">
-            <button
-              className="btn btn--primary btn--lg"
-              onClick={handleDownload}
-              disabled={loading}
-              id="download-btn"
-            >
-              {loading ? <span className="spinner" /> : "📥 Скачать Excel"}
-            </button>
-            <button className="btn btn--ghost btn--lg" onClick={handleReset}>
-              🔄 Начать заново
-            </button>
           </div>
         </div>
       )}

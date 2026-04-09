@@ -1292,9 +1292,11 @@ textarea.form-input {
 }
 
 .data-table-wrapper {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 600px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
+  position: relative;
 }
 
 .data-table {
@@ -1304,31 +1306,48 @@ textarea.form-input {
 }
 
 .data-table th {
-  background: var(--bg-secondary);
+  background: #1e293b;
   padding: var(--space-sm) var(--space-md);
   text-align: left;
   font-weight: 700;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   white-space: nowrap;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
   position: sticky;
   top: 0;
+  z-index: 10;
+}
+
+.data-table th:last-child {
+  border-right: none;
 }
 
 .data-table td {
   padding: var(--space-sm) var(--space-md);
   border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
   white-space: nowrap;
-  max-width: 300px;
+  max-width: 400px;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-secondary);
+}
+
+.data-table td:last-child {
+  border-right: none;
+}
+
+.data-table tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .data-table tr:hover td {
-  background: var(--bg-glass);
+  background: var(--bg-glass-hover) !important;
+  color: var(--text-primary);
 }
 
 .data-table-more {

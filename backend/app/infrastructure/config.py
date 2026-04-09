@@ -11,19 +11,23 @@ class Settings(BaseSettings):
     """Application configuration."""
 
     database_url: str | None = None
-    app_name: str = "FinLog"
+    app_name: str = "KedenFlow"
     debug: bool = False
     
     # LLM Settings (Optional for fallback)
     llm_api_key: str | None = None
     llm_base_url: str | None = None
-    llm_model_name: str = "gpt-4o-mini"
+    llm_model_name: str = "meta-llama/llama-4-scout-17b-16e-instruct"
 
     # Supabase Auth Settings
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
     supabase_jwt_secret: str | None = None
     admin_email: str = ""  # First admin auto-promoted on login
+
+    # Telegram Support Notifications
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
 
     class Config:
         env_file = ".env"

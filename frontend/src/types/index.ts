@@ -133,3 +133,15 @@ export interface ConverterProcessResult {
 }
 
 export type AggregationRule = "sum" | "unique_join" | "first" | "count" | "skip";
+
+// --- Support Module ---
+
+export interface SupportTicket {
+  id: string;
+  user_email: string;
+  user_name: string;
+  subject: string;
+  message: string;
+  status: "open" | "resolved" | "closed";
+  created_at: string;
+}

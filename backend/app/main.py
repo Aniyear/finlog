@@ -15,6 +15,7 @@ from app.presentation.receipt_router import router as receipt_router
 from app.presentation.auth_router import router as auth_router
 from app.presentation.admin_router import router as admin_router
 from app.presentation.converter_router import router as converter_router
+from app.presentation.support_router import router as support_router
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="FinLog API",
+    title="KedenFlow API",
     description="Modular financial management platform",
-    version="2.1.0",
+    version="2.2.0",
     lifespan=lifespan,
 )
 
@@ -59,6 +60,7 @@ app.include_router(broker_router)
 app.include_router(transaction_router)
 app.include_router(receipt_router)
 app.include_router(converter_router)
+app.include_router(support_router)
 
 
 @app.get("/health", tags=["Health"])

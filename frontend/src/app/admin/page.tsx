@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import type { AdminUser, AdminStats, UserModule } from "@/types";
 import {
   getAdminStats,
   getAdminUsers,
@@ -11,7 +10,10 @@ import {
   toggleUserActive,
   deleteUser,
   createUserProfile,
+  getSupportTickets,
+  updateTicketStatus,
 } from "@/lib/api";
+import type { AdminUser, AdminStats, UserModule, SupportTicket } from "@/types";
 import { supabase } from "@/lib/supabaseClient";
 import AdminGuard from "@/components/AdminGuard";
 
@@ -19,8 +21,10 @@ function AdminContent() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [modules, setModules] = useState<UserModule[]>([]);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"users" | "tickets">("users");
 
   // Create user modal
   const [showCreate, setShowCreate] = useState(false);
@@ -36,14 +40,16 @@ function AdminContent() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [s, u, m] = await Promise.all([
+      const [s, u, m, t] = await Promise.all([
         getAdminStats(),
         getAdminUsers(),
         getAdminModules(),
+        getSupportTickets(),
       ]);
       setStats(s);
       setUsers(u);
       setModules(m);
+      setTickets(t);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
@@ -151,6 +157,15 @@ function AdminContent() {
     }
   };
 
+  const handleUpdateTicketStatus = async (ticketId: string, status: string) => {
+    try {
+      await updateTicketStatus(ticketId, status);
+      await fetchData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update status");
+    }
+  };
+
   if (loading) {
     return (
       <div className="container">
@@ -220,66 +235,153 @@ function AdminContent() {
         </div>
       )}
 
-      {/* Users List */}
-      <h2 style={{ marginBottom: "var(--space-md)" }}>Пользователи</h2>
-      <div className="admin-user-list">
-        {users.map((user) => (
-          <div key={user.id} className="admin-user-card" id={`admin-user-${user.id}`}>
-            <div className="admin-user-card__info">
-              <div className="admin-user-card__avatar">
-                {user.display_name.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div className="admin-user-card__name">
-                  {user.display_name}
-                  {user.role === "admin" && (
-                    <span className="admin-badge">Админ</span>
-                  )}
-                  {!user.is_active && (
-                    <span className="inactive-badge">Неактивен</span>
-                  )}
-                </div>
-                <div className="admin-user-card__email">{user.email}</div>
-                <div className="admin-user-card__modules">
-                  {user.modules.length > 0
-                    ? user.modules
-                        .map((mid) => {
-                          const mod = modules.find((m) => m.id === mid);
-                          return mod ? `${mod.icon || "📦"} ${mod.name}` : mid;
-                        })
-                        .join(" • ")
-                    : "Нет модулей"}
-                </div>
-              </div>
-            </div>
-            <div className="admin-user-card__actions">
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => openModuleEditor(user)}
-                title="Настроить модули"
-              >
-                🔧 Модули
-              </button>
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => handleToggleActive(user)}
-                title={user.is_active ? "Деактивировать" : "Активировать"}
-              >
-                {user.is_active ? "🔒" : "🔓"}
-              </button>
-              {user.role !== "admin" && (
-                <button
-                  className="btn btn--danger btn--sm"
-                  onClick={() => handleDeleteUser(user)}
-                  title="Удалить"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+      {/* Tabs */}
+      <div className="tabs" style={{ display: "flex", gap: "var(--space-md)", marginBottom: "var(--space-xl)", borderBottom: "1px solid var(--border-color)" }}>
+        <button 
+          className={`btn ${activeTab === "users" ? "btn--primary" : "btn--ghost"}`}
+          onClick={() => setActiveTab("users")}
+          style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
+        >
+          👥 Пользователи
+        </button>
+        <button 
+          className={`btn ${activeTab === "tickets" ? "btn--primary" : "btn--ghost"}`}
+          onClick={() => setActiveTab("tickets")}
+          style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
+        >
+          🆘 Обращения {tickets.filter(t => t.status === "open").length > 0 && <span className="admin-badge" style={{ backgroundColor: "var(--accent)", marginLeft: 8 }}>{tickets.filter(t => t.status === "open").length}</span>}
+        </button>
       </div>
+
+      {activeTab === "users" ? (
+        <>
+          {/* Users List */}
+          <h2 style={{ marginBottom: "var(--space-md)" }}>Пользователи</h2>
+          <div className="admin-user-list">
+            {users.map((user) => (
+              <div key={user.id} className="admin-user-card" id={`admin-user-${user.id}`}>
+                <div className="admin-user-card__info">
+                  <div className="admin-user-card__avatar">
+                    {user.display_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="admin-user-card__name">
+                      {user.display_name}
+                      {user.role === "admin" && (
+                        <span className="admin-badge">Админ</span>
+                      )}
+                      {!user.is_active && (
+                        <span className="inactive-badge">Неактивен</span>
+                      )}
+                    </div>
+                    <div className="admin-user-card__email">{user.email}</div>
+                    <div className="admin-user-card__modules">
+                      {user.modules.length > 0
+                        ? user.modules
+                            .map((mid) => {
+                              const mod = modules.find((m) => m.id === mid);
+                              return mod ? `${mod.icon || "📦"} ${mod.name}` : mid;
+                            })
+                            .join(" • ")
+                        : "Нет модулей"}
+                    </div>
+                  </div>
+                </div>
+                <div className="admin-user-card__actions">
+                  <button
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => openModuleEditor(user)}
+                    title="Настроить модули"
+                  >
+                    🔧 Модули
+                  </button>
+                  <button
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => handleToggleActive(user)}
+                    title={user.is_active ? "Деактивировать" : "Активировать"}
+                  >
+                    {user.is_active ? "🔒" : "🔓"}
+                  </button>
+                  {user.role !== "admin" && (
+                    <button
+                      className="btn btn--danger btn--sm"
+                      onClick={() => handleDeleteUser(user)}
+                      title="Удалить"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Support Tickets List */}
+          <h2 style={{ marginBottom: "var(--space-md)" }}>Обращения пользователей</h2>
+          <div className="admin-user-list">
+            {tickets.length === 0 ? (
+              <div className="empty-state">Нет обращений</div>
+            ) : (
+              tickets.map((ticket) => (
+                <div key={ticket.id} className="admin-user-card" style={{ flexDirection: "column", alignItems: "flex-start", gap: "var(--space-md)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                      <div className="admin-user-card__avatar" style={{ width: 32, height: 32, fontSize: "0.9rem" }}>
+                        {ticket.user_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: "bold" }}>{ticket.user_name}</div>
+                        <div className="admin-user-card__email" style={{ fontSize: "0.8rem" }}>{ticket.user_email}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                      <span className="admin-badge" style={{ 
+                        backgroundColor: ticket.status === "open" ? "var(--accent)" : ticket.status === "resolved" ? "var(--success)" : "var(--text-muted)",
+                        color: "white"
+                      }}>
+                        {ticket.status === "open" ? "Новый" : ticket.status === "resolved" ? "Решен" : "Закрыт"}
+                      </span>
+                      <span className="admin-user-card__email" style={{ fontSize: "0.8rem" }}>
+                        {new Date(ticket.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ width: "100%", padding: "var(--space-md)", backgroundColor: "rgba(255,255,255,0.03)", borderRadius: "var(--radius-md)", borderLeft: "3px solid var(--accent)" }}>
+                    <div style={{ fontWeight: "600", marginBottom: "var(--space-xs)" }}>{ticket.subject}</div>
+                    <div style={{ fontSize: "0.95rem", color: "var(--text-muted)", whiteSpace: "pre-wrap" }}>{ticket.message}</div>
+                  </div>
+
+                  <div className="admin-user-card__actions" style={{ marginLeft: 0 }}>
+                    <button 
+                      className={`btn btn--sm ${ticket.status === "resolved" ? "btn--primary" : "btn--outline"}`}
+                      onClick={() => handleUpdateTicketStatus(ticket.id, "resolved")}
+                    >
+                      ✅ Решен
+                    </button>
+                    <button 
+                      className={`btn btn--sm ${ticket.status === "closed" ? "btn--ghost" : "btn--outline"}`}
+                      onClick={() => handleUpdateTicketStatus(ticket.id, "closed")}
+                    >
+                      🔒 Закрыть
+                    </button>
+                    {ticket.status !== "open" && (
+                      <button 
+                        className="btn btn--sm btn--outline"
+                        onClick={() => handleUpdateTicketStatus(ticket.id, "open")}
+                      >
+                        🔄 Переоткрыть
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
 
       {/* Create User Modal */}
       {showCreate && (

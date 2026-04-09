@@ -16,6 +16,7 @@ import type {
   ConverterPreview,
   ConverterProcessResult,
   AggregationRule,
+  SupportTicket,
 } from "@/types";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -323,4 +324,19 @@ export async function converterDownload(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// --- Support ---
+
+export async function getSupportTickets(): Promise<SupportTicket[]> {
+  return request<SupportTicket[]>("/support/tickets");
+}
+
+export async function updateTicketStatus(
+  ticketId: string,
+  status: string
+): Promise<void> {
+  return request<void>(`/support/tickets/${ticketId}/status?status=${status}`, {
+    method: "PATCH",
+  });
 }

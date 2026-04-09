@@ -4,6 +4,8 @@ import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Link from "next/link";
+import { useState } from "react";
+import SupportModal from "@/components/SupportModal";
 
 /** Route map for each module */
 const MODULE_ROUTES: Record<string, string> = {
@@ -13,6 +15,7 @@ const MODULE_ROUTES: Record<string, string> = {
 
 export default function HomePage() {
   const { profile, loading, signOut, user } = useAuth();
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
   const router = useRouter();
 
   // Redirect to login if not authenticated
@@ -50,6 +53,13 @@ export default function HomePage() {
             </div>
           </div>
           <div className="header__actions">
+            <button
+              className="btn btn--support btn--sm"
+              style={{ marginRight: "var(--space-sm)" }}
+              onClick={() => setIsSupportOpen(true)}
+            >
+              🆘 Поддержка
+            </button>
             <div className="header__user">
               <span className="header__user-name">
                 {profile.display_name}
@@ -120,6 +130,10 @@ export default function HomePage() {
           </Link>
         </section>
       )}
+      <SupportModal 
+        isOpen={isSupportOpen} 
+        onClose={() => setIsSupportOpen(false)} 
+      />
     </div>
   );
 }

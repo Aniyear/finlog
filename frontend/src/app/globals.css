@@ -343,6 +343,32 @@ a:hover {
   border-color: var(--border-active);
 }
 
+.btn--outline {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn--outline:hover:not(:disabled) {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.btn--support {
+  background: rgba(58, 175, 169, 0.1);
+  color: #3AAFA9;
+  border: 1px solid rgba(58, 175, 169, 0.3);
+  box-shadow: 0 0 10px rgba(58, 175, 169, 0.1);
+}
+
+.btn--support:hover:not(:disabled) {
+  background: rgba(58, 175, 169, 0.2);
+  border-color: #3AAFA9;
+  box-shadow: 0 0 15px rgba(58, 175, 169, 0.2);
+  transform: translateY(-1px);
+}
+
 .btn--sm {
   padding: 0.375rem 0.75rem;
   font-size: 0.8125rem;

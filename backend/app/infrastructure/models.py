@@ -179,3 +179,29 @@ class UserModuleAccessModel(Base):
 
     def __repr__(self) -> str:
         return f"<UserModuleAccess(user={self.user_id}, module={self.module_id!r})>"
+
+
+class SupportTicketModel(Base):
+    """ORM model for the support_tickets table."""
+
+    __tablename__ = "support_tickets"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("user_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open, resolved, closed
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=get_now_tz
+    )
+
+    user: Mapped["UserProfileModel"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<SupportTicket(id={self.id}, user={self.user_id}, status={self.status})>"

@@ -185,6 +185,17 @@ async def delete_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
 
+@router.post("/transactions/bulk-delete", status_code=204)
+async def delete_transactions_bulk(
+    transaction_ids: list[UUID],
+    auth_user: AuthUserModel = Depends(require_module("debt_management")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete multiple transactions."""
+    service = TransactionService(session)
+    await service.delete_transactions_bulk(transaction_ids)
+
+
 @router.get("/brokers/{broker_id}/export")
 async def export_transactions_excel(
     broker_id: UUID,

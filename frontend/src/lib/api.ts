@@ -111,7 +111,14 @@ export async function createTransaction(
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-  return request<void>(`/transactions/${id}`, { method: "DELETE" });
+  await request(`/transactions/${id}`, { method: "DELETE" });
+}
+
+export async function deleteTransactionsBulk(ids: string[]): Promise<void> {
+  await request(`/transactions/bulk-delete`, {
+    method: "POST",
+    body: JSON.stringify(ids),
+  });
 }
 
 // --- Receipts ---

@@ -38,6 +38,10 @@ class TransactionService:
         """Delete a transaction. Returns True if found and deleted."""
         return await self._repo.delete(transaction_id)
 
+    async def delete_transactions_bulk(self, transaction_ids: list[UUID]) -> int:
+        """Delete multiple transactions. Returns number of deleted rows."""
+        return await self._repo.delete_many(transaction_ids)
+
     async def get_debt(self, broker_id: UUID) -> Decimal:
         """
         Calculate current debt for a broker.

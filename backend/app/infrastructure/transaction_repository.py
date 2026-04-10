@@ -53,6 +53,14 @@ class TransactionRepository:
         await self._session.flush()
         return True
 
+    async def delete_many(self, transaction_ids: list[UUID]) -> int:
+        """Delete multiple transactions by ID. Returns number of deleted rows."""
+        from sqlalchemy import delete
+        stmt = delete(TransactionModel).where(TransactionModel.id.in_(transaction_ids))
+        result = await self._session.execute(stmt)
+        await self._session.flush()
+        return result.rowcount
+
     async def calculate_debt(self, broker_id: UUID) -> Decimal:
         """
         Calculate current debt for a broker.

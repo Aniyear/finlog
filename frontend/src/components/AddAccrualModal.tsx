@@ -112,7 +112,7 @@ export default function AddAccrualModal({ brokerId, onClose, onSuccess }: Props)
             disabled={loading || !amount}
             id="confirm-accrual-btn"
           >
-            {loading ? <span className="spinner" /> : "Добавить"}
+            {loading ? <><span className="spinner" /> Создание...</> : "Добавить"}
           </button>
         </div>
       </div>

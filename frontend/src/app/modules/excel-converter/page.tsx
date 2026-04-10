@@ -165,8 +165,8 @@ function ConverterContent() {
       <header className="header">
         <div className="header__inner">
           <div className="header__logo">
-            <Link href="/" className="back-link" style={{ marginRight: "var(--space-sm)" }}>
-              ←
+            <Link href="/" className="back-btn">
+              ← Назад
             </Link>
             <div
               className="header__logo-icon"
@@ -419,7 +419,7 @@ function ConverterContent() {
                     disabled={loading || isProcessing}
                     id="download-btn"
                   >
-                    {loading ? <span className="spinner" /> : "📥 Скачать готовый Excel"}
+                    {loading ? <><span className="spinner" /> Скачивание...</> : "📥 Скачать Excel"}
                   </button>
                   <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginLeft: "var(--space-md)", fontStyle: "italic" }}>
                     * Файл будет содержать все данные и полное форматирование

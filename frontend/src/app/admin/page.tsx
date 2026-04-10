@@ -183,8 +183,8 @@ function AdminContent() {
       <header className="header">
         <div className="header__inner">
           <div className="header__logo">
-            <Link href="/" className="back-link" style={{ marginRight: "var(--space-sm)" }}>
-              ←
+            <Link href="/" className="back-btn">
+              ← Назад
             </Link>
             <div className="header__logo-icon" style={{ background: "linear-gradient(135deg, #f59e0b, #ef4444)" }}>
               ⚙️

@@ -336,6 +336,9 @@ class ExcelConverterService:
 
         # Freeze header row
         ws.freeze_panes = "A2"
+        
+        # Add auto filters to headers
+        ws.auto_filter.ref = ws.dimensions
 
         output = io.BytesIO()
         wb.save(output)

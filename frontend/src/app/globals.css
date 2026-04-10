@@ -188,7 +188,7 @@ a:hover {
 .header__logo {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-md);
 }
 
 .header__logo-icon {
@@ -258,6 +258,7 @@ a:hover {
   gap: var(--space-sm);
   padding: 0 1rem;
   height: 40px;
+  min-width: 100px;
   font-family: var(--font-sans);
   font-size: 0.8125rem;
   font-weight: 600;
@@ -269,6 +270,10 @@ a:hover {
   line-height: 1;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+}
+
+.btn .spinner {
+  margin: 0 auto;
 }
 
 .btn:active:not(:disabled) {
@@ -390,6 +395,7 @@ a:hover {
 
 .btn--block {
   width: 100%;
+  min-width: unset;
 }
 
 /* ===== Action Buttons Grid ===== */
@@ -903,20 +909,37 @@ textarea.form-input {
   color: var(--success);
 }
 
-/* ===== Back Link ===== */
-.back-link {
+/* ===== Back Button ===== */
+.back-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-xs);
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-bottom: var(--space-lg);
-  transition: color var(--transition-fast);
+  height: 36px;
+  padding: 0 var(--space-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.back-link:hover {
+.back-btn:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-active);
   color: var(--text-primary);
+}
+
+.back-btn:active {
+  transform: scale(0.97);
 }
 
 /* ===== Section Header ===== */

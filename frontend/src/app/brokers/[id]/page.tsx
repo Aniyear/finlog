@@ -115,9 +115,8 @@ export default function BrokerDetailPage() {
               className="btn btn--ghost btn--sm" 
               onClick={() => window.location.reload()} 
               title="Обновить страницу"
-              style={{ padding: '8px', minWidth: 'auto', borderRadius: '50%', color: 'var(--accent)' }}
             >
-              🔄
+              🔄 Обновить
             </button>
           </div>
         </div>

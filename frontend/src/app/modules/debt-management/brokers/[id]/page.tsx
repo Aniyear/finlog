@@ -118,19 +118,18 @@ function BrokerDetailContent() {
       <header className="header">
         <div className="header__inner">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-            <div>
-              <Link href="/modules/debt-management" className="back-link">
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+              <Link href="/modules/debt-management" className="back-btn" style={{ alignSelf: "flex-start" }}>
                 ← Все декларанты
               </Link>
-              <h1>{broker.name}</h1>
+              <h1 style={{ margin: 0 }}>{broker.name}</h1>
             </div>
             <button
               className="btn btn--ghost btn--sm"
               onClick={() => window.location.reload()}
               title="Обновить страницу"
-              style={{ padding: "8px", minWidth: "auto", borderRadius: "50%", color: "var(--accent)" }}
             >
-              🔄
+              🔄 Обновить
             </button>
           </div>
         </div>
@@ -190,7 +189,7 @@ function BrokerDetailContent() {
           onClick={handleExport}
           disabled={exporting}
         >
-          {exporting ? <span className="spinner" /> : "📊"} Выгрузить в Excel
+          {exporting ? <><span className="spinner" /> Выгрузка...</> : "📊 Выгрузить в Excel"}
         </button>
       </div>
 

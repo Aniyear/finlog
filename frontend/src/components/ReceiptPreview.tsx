@@ -151,7 +151,7 @@ export default function ReceiptPreview({
           disabled={saving || !editData.amount}
           id="save-receipt-btn"
         >
-          {saving ? <span className="spinner" /> : "Сохранить операцию"}
+          {saving ? <><span className="spinner" /> Сохранение...</> : "Сохранить операцию"}
         </button>
       </div>
     </div>

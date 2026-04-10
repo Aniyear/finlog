@@ -62,8 +62,8 @@ function DebtManagementContent() {
       <header className="header">
         <div className="header__inner">
           <div className="header__logo">
-            <Link href="/" className="back-link" style={{ marginRight: "var(--space-sm)" }}>
-              ←
+            <Link href="/" className="back-btn">
+              ← Назад
             </Link>
             <div className="header__logo-icon">📊</div>
             <div>
@@ -74,9 +74,8 @@ function DebtManagementContent() {
               className="btn btn--ghost btn--sm"
               onClick={() => window.location.reload()}
               title="Обновить страницу"
-              style={{ padding: "8px", minWidth: "auto", borderRadius: "50%", color: "var(--accent)" }}
             >
-              🔄
+              🔄 Обновить
             </button>
           </div>
           <button

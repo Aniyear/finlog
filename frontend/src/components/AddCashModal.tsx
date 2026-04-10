@@ -128,7 +128,7 @@ export default function AddCashModal({ brokerId, onClose, onSuccess }: Props) {
             disabled={loading || !amount}
             id="confirm-cash-btn"
           >
-            {loading ? <span className="spinner" /> : "Добавить"}
+            {loading ? <><span className="spinner" /> Создание...</> : "Добавить"}
           </button>
         </div>
       </div>

@@ -62,7 +62,7 @@ class TransactionService:
     async def export_broker_transactions_to_excel(self, broker_id: UUID) -> bytes:
         """Export all transactions for a broker to an Excel file using openpyxl."""
         import openpyxl
-        from openpyxl.styles import Font, Alignment
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
         import io
         from datetime import timezone, timedelta
 
@@ -83,10 +83,24 @@ class TransactionService:
         
         ws.append(headers)
 
-        header_font = Font(bold=True)
+        # Style definitions
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="0D9488", end_color="0D9488", fill_type="solid") # Teal header
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        thin_border = Border(
+            left=Side(style="thin", color="D1D5DB"),
+            right=Side(style="thin", color="D1D5DB"),
+            top=Side(style="thin", color="D1D5DB"),
+            bottom=Side(style="thin", color="D1D5DB"),
+        )
+        data_alignment = Alignment(vertical="center", wrap_text=True)
+        num_format = '#,##0.00 ₸'
+
         for cell in ws[1]:
             cell.font = header_font
-            cell.alignment = Alignment(horizontal="center")
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
 
         type_map = {
             "accrual": "Начисление",
@@ -101,7 +115,6 @@ class TransactionService:
         }
 
         for tx in transactions:
-            # Ensure timezone conversion for display
             display_dt = tx.datetime.astimezone(report_tz)
             display_created = tx.created_at.astimezone(report_tz)
 
@@ -120,20 +133,37 @@ class TransactionService:
             ]
             ws.append(row)
 
+            # Apply borders and formats to the newly added row
+            row_idx = ws.max_row
+            for col_idx, cell in enumerate(ws[row_idx], start=1):
+                cell.border = thin_border
+                cell.alignment = data_alignment
+                if col_idx == 3: # Сумма column
+                    cell.number_format = num_format
+                if col_idx in [1, 2, 4, 11]: # center align standard fields
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+
         for col_idx in range(1, len(headers) + 1):
             column_letter = openpyxl.utils.get_column_letter(col_idx)
             max_length = 0
             for row in ws.iter_rows(min_col=col_idx, max_col=col_idx):
                 for cell in row:
                     try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
+                        cell_len = len(str(cell.value)) if cell.value else 0
+                        if cell_len > max_length:
+                            max_length = cell_len
                     except Exception:
                         pass
-            adjusted_width = (max_length + 2)
-            if adjusted_width > 50:
-                adjusted_width = 50 
+            adjusted_width = min(max_length + 2, 50)
+            if adjusted_width < 12:
+                adjusted_width = 12
             ws.column_dimensions[column_letter].width = adjusted_width
+
+        # Add auto filters to headers
+        ws.auto_filter.ref = ws.dimensions
+        
+        # Freeze top row
+        ws.freeze_panes = "A2"
 
         output = io.BytesIO()
         wb.save(output)

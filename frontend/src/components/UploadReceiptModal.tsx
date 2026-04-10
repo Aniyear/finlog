@@ -157,7 +157,7 @@ export default function UploadReceiptModal({
                 disabled={files.length === 0 || uploading}
               >
                 {uploading ? (
-                  <span className="spinner" />
+                  <><span className="spinner" /> Идёт распознавание...</>
                 ) : (
                   "Распознать документы"
                 )}

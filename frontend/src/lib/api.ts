@@ -49,6 +49,14 @@ async function request<T>(
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
+    
+    // Global handling for expired sessions or deactivated accounts (401/403)
+    if ((res.status === 401 || res.status === 403) && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("auth-error", { 
+        detail: { message: errorData.detail || "Сессия истекла. Пожалуйста, войдите снова." }
+      }));
+    }
+
     throw new Error(errorData.detail || `API error: ${res.status}`);
   }
 

@@ -13,6 +13,18 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
 
+  // Read error from URL if redirected
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get("error");
+      if (err) {
+        setError(err);
+        // Clean the URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, []);
 
   // Redirect if already logged in
   useEffect(() => {

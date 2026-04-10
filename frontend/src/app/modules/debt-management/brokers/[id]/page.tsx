@@ -124,13 +124,6 @@ function BrokerDetailContent() {
               </Link>
               <h1 style={{ margin: 0 }}>{broker.name}</h1>
             </div>
-            <button
-              className="btn btn--ghost btn--sm"
-              onClick={() => window.location.reload()}
-              title="Обновить страницу"
-            >
-              🔄 Обновить
-            </button>
           </div>
         </div>
       </header>

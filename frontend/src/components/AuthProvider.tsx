@@ -83,7 +83,28 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Listen for global API 401/403 errors
+    const handleAuthError = async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const message = customEvent.detail?.message || "Сессия истекла";
+      console.warn("Global auth error caught:", message);
+      
+      await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setIsDeactivated(true);
+      
+      // Redirect to login with error
+      window.location.href = `/login?error=${encodeURIComponent(message)}`;
+    };
+    
+    window.addEventListener("auth-error", handleAuthError);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener("auth-error", handleAuthError);
+    };
   }, [fetchProfile]);
 
   const signIn = async (email: string, password: string) => {

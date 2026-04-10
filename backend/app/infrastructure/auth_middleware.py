@@ -16,6 +16,7 @@ import jwt
 from jwt import PyJWK
 from fastapi import Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.infrastructure.config import get_settings
 from app.infrastructure.database import get_session
@@ -126,31 +127,68 @@ async def get_current_user(
         # Check if this is the admin email
         role = "admin" if (settings.admin_email and email.lower() == settings.admin_email.lower()) else "user"
 
-        user = await repo.create(
-            auth_id=auth_id,
-            email=email,
-            display_name=display_name,
-            role=role,
-            is_active=True if role == "admin" else False,
-        )
-
-        # If admin, grant access to all modules
-        if role == "admin":
-            from app.infrastructure.user_repository import ModuleRepository
-            module_repo = ModuleRepository(session)
-            all_modules = await module_repo.get_all()
-            await repo.set_user_modules(
-                user.id,
-                [m.id for m in all_modules],
+        try:
+            user = await repo.create(
+                auth_id=auth_id,
+                email=email,
+                display_name=display_name,
+                role=role,
+                is_active=True if role == "admin" else False,
             )
 
-        await session.commit()
-        logger.info(f"Auto-created profile for {email} (role={role})")
+            # If admin, grant access to all modules
+            if role == "admin":
+                from app.infrastructure.user_repository import ModuleRepository
+                module_repo = ModuleRepository(session)
+                all_modules = await module_repo.get_all()
+                await repo.set_user_modules(
+                    user.id,
+                    [m.id for m in all_modules],
+                )
+
+            await session.commit()
+            logger.info(f"Auto-created profile for {email} (role={role})")
+            
+            # Note: We only send the newly created notification if we successfully created them
+            send_notification = True
+            
+        except IntegrityError:
+            # Another concurrent request already created the user.
+            await session.rollback()
+            user = await repo.get_by_auth_id(auth_id)
+            if not user:
+                # If they still don't exist by auth_id, maybe the email conflicted
+                user = await repo.get_by_email(email)
+                if not user:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to auto-create user due to a conflict.",
+                    )
+            send_notification = False
+
+        # Send Telegram notification for new non-admin registrations
+        if send_notification and role != "admin":
+            import asyncio
+            from app.infrastructure.telegram_service import TelegramService
+            async def _notify():
+                try:
+                    tg = TelegramService()
+                    await tg.notify_new_registration(email, display_name)
+                except Exception as e:
+                    logger.warning(f"Telegram notification failed: {e}")
+            asyncio.ensure_future(_notify())
 
     if not user.is_active:
+        # Distinguish between explicitly deactivated vs newly created/pending.
+        # If updated_at is essentially the same as created_at, it hasn't been touched since auto-creation.
+        if abs((user.updated_at - user.created_at).total_seconds()) < 1.0:
+            msg = "Ваш аккаунт ожидает подтверждения администратором"
+        else:
+            msg = "Ваш аккаунт деактивирован администратором"
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Ваш аккаунт ожидает подтверждения администратором",
+            detail=msg,
         )
 
     return user

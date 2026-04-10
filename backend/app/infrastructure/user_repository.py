@@ -143,6 +143,12 @@ class UserRepository:
         user = await self.get_by_id(user_id)
         if user is None:
             return False
+        # Remove related module access first (FK constraint)
+        await self._session.execute(
+            delete(UserModuleAccessModel).where(
+                UserModuleAccessModel.user_id == user_id
+            )
+        )
         await self._session.delete(user)
         await self._session.flush()
         return True

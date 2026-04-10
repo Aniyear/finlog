@@ -47,3 +47,14 @@ class TelegramService:
             f"<i>Интерфейс админа: KedenFlow Admin</i>"
         )
         await self.send_message(text)
+
+    async def notify_new_registration(self, user_email: str, display_name: str):
+        """Send a notification when a new user registers and awaits approval."""
+        text = (
+            f"🆕 <b>Новая регистрация!</b>\n\n"
+            f"👤 <b>Имя:</b> {display_name}\n"
+            f"📧 <b>Email:</b> {user_email}\n\n"
+            f"⏳ Аккаунт ожидает подтверждения.\n"
+            f"Откройте <b>Admin → Заявки</b> чтобы одобрить."
+        )
+        await self.send_message(text)

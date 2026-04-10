@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+import httpx
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.auth_middleware import require_admin, get_current_user
+from app.infrastructure.config import get_settings
 from app.infrastructure.database import get_session
 from app.infrastructure.models import UserProfileModel
 from app.application.user_service import UserService, ModuleService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
@@ -66,8 +70,8 @@ class UpdateActiveRequest(BaseModel):
 
 
 class CreateUserRequest(BaseModel):
-    auth_id: UUID
     email: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=6)
     display_name: str = Field(..., min_length=1)
     role: str = "user"
     module_ids: list[str] = []
@@ -173,23 +177,49 @@ async def create_user(
     admin: UserProfileModel = Depends(require_admin()),
     session: AsyncSession = Depends(get_session),
 ):
-    """Create a new user profile (after Supabase account is created on frontend)."""
+    """Create a new user completely via backend, without logging out the admin."""
+    settings = get_settings()
+    if not settings.supabase_service_key:
+        raise HTTPException(
+            status_code=500, detail="Need SUPABASE_SERVICE_KEY in .env to create users via Admin Panel."
+        )
+
+    # 1. Create user in Supabase Auth
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            f"{settings.supabase_url}/auth/v1/admin/users",
+            headers={
+                "apikey": settings.supabase_service_key,
+                "Authorization": f"Bearer {settings.supabase_service_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "email": body.email,
+                "password": body.password,
+                "email_confirm": True,
+                "user_metadata": {"display_name": body.display_name},
+            },
+        )
+        if res.status_code != 200:
+            logger.error(f"Supabase auth error: {res.text}")
+            raise HTTPException(status_code=400, detail="Failed to create user in Supabase Auth." + res.text)
+        
+        auth_data = res.json()
+        auth_id = UUID(auth_data["id"])
+
+    # 2. Create user profile in Database
     service = UserService(session)
-
-    # Check if user already exists
-    existing = await service.get_profile_by_auth_id(body.auth_id)
-    if existing:
-        raise HTTPException(status_code=409, detail="User already exists")
-
     user = await service.create_user(
-        auth_id=body.auth_id,
+        auth_id=auth_id,
         email=body.email,
         display_name=body.display_name,
         role=body.role,
         module_ids=body.module_ids,
+        is_active=True,  # Auto-activate since admin created them
     )
+    await session.commit()
 
-    # Re-fetch to get module relations
+    # Re-fetch for full response
     user = await service.get_profile(user.id)
     return _user_to_detail(user)
 
@@ -242,14 +272,36 @@ async def delete_user(
     admin: UserProfileModel = Depends(require_admin()),
     session: AsyncSession = Depends(get_session),
 ):
-    """Delete a user profile."""
+    """Delete a user profile and their auth record."""
     if user_id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
 
     service = UserService(session)
+    user = await service.get_profile(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    auth_id = user.auth_id
+
+    # 1. Delete from PostgreSQL
     deleted = await service.delete_user(user_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Failed to delete user from database")
+    await session.commit()
+    
+    # 2. Try deleting from Supabase Auth
+    settings = get_settings()
+    if settings.supabase_service_key:
+        async with httpx.AsyncClient() as client:
+            await client.delete(
+                f"{settings.supabase_url}/auth/v1/admin/users/{auth_id}",
+                headers={
+                    "apikey": settings.supabase_service_key,
+                    "Authorization": f"Bearer {settings.supabase_service_key}",
+                }
+            )
+
+    logger.info(f"User {user_id} deleted by admin {admin.email}")
 
 
 @router.get("/modules", response_model=list[ModuleResponse])

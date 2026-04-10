@@ -67,40 +67,12 @@ function AdminContent() {
     setError(null);
 
     try {
-      // Create Supabase auth account using admin invite
-      const { data, error: authError } = await supabase.auth.admin.createUser({
+      // Create user directly via our backend (which uses Supabase Admin API)
+      await createUserProfile({
         email: newEmail.trim(),
         password: newPassword,
-        email_confirm: true,
-        user_metadata: { display_name: newName.trim() },
+        display_name: newName.trim(),
       });
-
-      if (authError) {
-        // Fallback: try signUp (for non-admin Supabase keys)
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: newEmail.trim(),
-          password: newPassword,
-          options: {
-            data: { display_name: newName.trim() },
-          },
-        });
-
-        if (signUpError) throw signUpError;
-        if (!signUpData.user) throw new Error("Failed to create user");
-
-        await createUserProfile({
-          auth_id: signUpData.user.id,
-          email: newEmail.trim(),
-          display_name: newName.trim(),
-        });
-      } else {
-        if (!data.user) throw new Error("Failed to create user");
-        await createUserProfile({
-          auth_id: data.user.id,
-          email: newEmail.trim(),
-          display_name: newName.trim(),
-        });
-      }
 
       setNewEmail("");
       setNewName("");

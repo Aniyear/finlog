@@ -241,8 +241,8 @@ export async function getAdminModules(): Promise<UserModule[]> {
 }
 
 export async function createUserProfile(data: {
-  auth_id: string;
   email: string;
+  password: string;
   display_name: string;
   role?: string;
   module_ids?: string[];

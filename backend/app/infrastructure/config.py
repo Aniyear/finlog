@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
     supabase_jwt_secret: str | None = None
+    supabase_service_key: str | None = None
     admin_email: str = ""  # First admin auto-promoted on login
 
     # Telegram Support Notifications

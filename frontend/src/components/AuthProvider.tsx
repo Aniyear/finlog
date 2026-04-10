@@ -42,17 +42,24 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingApproval, setPendingApproval] = useState(false);
   const [isDeactivated, setIsDeactivated] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
-      const p = await getMyProfile();
+      const p = await getMyProfile(true);
       setProfile(p);
+      setPendingApproval(false);
       setIsDeactivated(false);
     } catch (err: any) {
       console.error("Failed to fetch profile:", err);
-      if (err.message && err.message.includes("Account is deactivated")) {
+      const msg = err?.message || "";
+      if (msg.includes("ожидает подтверждения")) {
+        setPendingApproval(true);
+        setIsDeactivated(false);
+      } else if (msg.includes("deactivated") || msg.includes("деактивирован")) {
         setIsDeactivated(true);
+        setPendingApproval(false);
       }
       setProfile(null);
     }
@@ -80,6 +87,8 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         fetchProfile();
       } else {
         setProfile(null);
+        setPendingApproval(false);
+        setIsDeactivated(false);
       }
     });
 
@@ -88,17 +97,28 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       const customEvent = e as CustomEvent;
       const message = customEvent.detail?.message || "Сессия истекла";
       console.warn("Global auth error caught:", message);
-      
+
+      // If it's a pending approval message, handle gracefully
+      if (message.includes("ожидает подтверждения")) {
+        setPendingApproval(true);
+        return;
+      }
+
+      // If explicitly deactivated
+      if (message.includes("деактивирован")) {
+        setIsDeactivated(true);
+        return;
+      }
+
       await supabase.auth.signOut();
       setUser(null);
       setSession(null);
       setProfile(null);
-      setIsDeactivated(true);
-      
-      // Redirect to login with error
+
+      // Redirect to login with error for any other unexpected auth-errors
       window.location.href = `/login?error=${encodeURIComponent(message)}`;
     };
-    
+
     window.addEventListener("auth-error", handleAuthError);
 
     return () => {
@@ -120,6 +140,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setProfile(null);
+    setPendingApproval(false);
     setIsDeactivated(false);
   };
 
@@ -127,54 +148,161 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     await fetchProfile();
   };
 
-  return (
-    <AuthContext.Provider
-      value={{ user, session, profile, loading, signIn, signOut, refreshProfile }}
-    >
-      {isDeactivated ? (
-        <div 
-          className="container" 
-          style={{ 
-            display: "flex", 
-            flexDirection: "column", 
-            alignItems: "center", 
-            justifyContent: "center", 
-            height: "100vh", 
-            textAlign: "center" 
+  // --- Pending Approval Screen ---
+  if (pendingApproval && user) {
+    return (
+      <AuthContext.Provider
+        value={{ user, session, profile, loading, signIn, signOut, refreshProfile }}
+      >
+        <div
+          className="container"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100vh",
+            textAlign: "center",
           }}
         >
-          <div 
-            className="card" 
-            style={{ 
-              maxWidth: "400px", 
-              padding: "var(--space-2xl)", 
-              border: "2px solid var(--border-active)",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.3)"
+          <div
+            className="card animate-in"
+            style={{
+              maxWidth: "440px",
+              padding: "var(--space-2xl)",
+              border: "1px solid var(--border-active)",
+              boxShadow: "var(--shadow-glow), var(--shadow-xl)",
             }}
           >
-            <div 
-              style={{ 
-                fontSize: "4rem", 
+            <div
+              style={{
+                fontSize: "4rem",
+                marginBottom: "var(--space-lg)",
+                animation: "pendingPulse 2s ease-in-out infinite",
+              }}
+            >
+              ⏳
+            </div>
+            <h1
+              className="header__title"
+              style={{ fontSize: "1.5rem", marginBottom: "var(--space-sm)" }}
+            >
+              Заявка отправлена!
+            </h1>
+            <p
+              style={{
+                margin: "var(--space-md) 0 var(--space-xl)",
+                color: "var(--text-secondary)",
+                lineHeight: "1.7",
+                fontSize: "0.95rem",
+              }}
+            >
+              Ваш аккаунт успешно создан и ожидает подтверждения
+              администратором. Вы получите доступ к платформе, как только
+              администратор одобрит вашу заявку.
+            </p>
+            <div
+              style={{
+                background: "var(--bg-glass)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "var(--radius-md)",
+                padding: "var(--space-md)",
+                marginBottom: "var(--space-xl)",
+                fontSize: "0.85rem",
+                color: "var(--text-muted)",
+              }}
+            >
+              📧 {user.email}
+            </div>
+            <button
+              className="btn btn--ghost btn--lg"
+              style={{ width: "100%" }}
+              onClick={signOut}
+            >
+              Выйти
+            </button>
+          </div>
+        </div>
+        <style>{`
+          @keyframes pendingPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+          }
+        `}</style>
+      </AuthContext.Provider>
+    );
+  }
+
+  // --- Deactivated Account Screen ---
+  if (isDeactivated) {
+    return (
+      <AuthContext.Provider
+        value={{ user, session, profile, loading, signIn, signOut, refreshProfile }}
+      >
+        <div
+          className="container"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100vh",
+            textAlign: "center",
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: "400px",
+              padding: "var(--space-2xl)",
+              border: "2px solid var(--danger)",
+              boxShadow:
+                "0 20px 40px rgba(0,0,0,0.3), 0 0 20px rgba(239, 68, 68, 0.1)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "4rem",
                 marginBottom: "var(--space-md)",
-                filter: "drop-shadow(0 0 10px rgba(239, 68, 68, 0.4))"
+                filter: "drop-shadow(0 0 10px rgba(239, 68, 68, 0.4))",
               }}
             >
               🔒
             </div>
-            <h1 className="header__title" style={{ fontSize: "1.5rem", marginBottom: "var(--space-sm)" }}>
+            <h1
+              className="header__title"
+              style={{ fontSize: "1.5rem", marginBottom: "var(--space-sm)" }}
+            >
               Доступ заблокирован
             </h1>
-            <p className="header__subtitle" style={{ marginBottom: "var(--space-xl)", color: "var(--text-muted)" }}>
-              Ваш аккаунт деактивирован администратором. Пожалуйста, свяжитесь с поддержкой для восстановления доступа.
+            <p
+              className="header__subtitle"
+              style={{
+                marginBottom: "var(--space-xl)",
+                color: "var(--text-muted)",
+              }}
+            >
+              Ваш аккаунт деактивирован администратором. Пожалуйста, свяжитесь
+              с поддержкой для восстановления доступа.
             </p>
-            <button className="btn btn--primary btn--lg" style={{ width: "100%" }} onClick={signOut}>
+            <button
+              className="btn btn--primary btn--lg"
+              style={{ width: "100%" }}
+              onClick={signOut}
+            >
               Выйти из системы
             </button>
           </div>
         </div>
-      ) : (
-        children
-      )}
+      </AuthContext.Provider>
+    );
+  }
+
+  return (
+    <AuthContext.Provider
+      value={{ user, session, profile, loading, signIn, signOut, refreshProfile }}
+    >
+      {children}
     </AuthContext.Provider>
   );
 }

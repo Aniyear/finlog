@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timezone, timedelta
 from functools import lru_cache
-
 from pydantic_settings import BaseSettings
 
 
@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+
+# Default timezone for the application (UTC+5)
+APP_TZ = timezone(timedelta(hours=5))
 
 
 @lru_cache

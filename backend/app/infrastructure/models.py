@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 import datetime as dt
 from datetime import timezone, timedelta
+from app.infrastructure.config import get_settings, APP_TZ
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,9 +20,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database import Base
-
-# Default timezone for the application (UTC+5)
-APP_TZ = timezone(timedelta(hours=5))
 
 def get_now_tz():
     return dt.datetime.now(APP_TZ)

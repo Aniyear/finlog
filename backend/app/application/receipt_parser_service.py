@@ -19,7 +19,7 @@ import fitz  # PyMuPDF
 import openai
 from pydantic import BaseModel, Field
 
-from app.infrastructure.config import get_settings
+from app.infrastructure.config import get_settings, APP_TZ
 
 logger = logging.getLogger(__name__)
 
@@ -223,10 +223,14 @@ class ReceiptParserService:
                 if "." in raw_dt[-5:]:
                     raw_dt = raw_dt[:-5] + raw_dt[-5:].replace(".", ":")
                 for fmt in cls.DATETIME_FORMATS:
-                    try: return raw_dt, datetime.strptime(raw_dt, fmt)
+                    try: 
+                        dt = datetime.strptime(raw_dt, fmt)
+                        return raw_dt, dt.replace(tzinfo=APP_TZ)
                     except ValueError: pass
         for fmt in cls.DATETIME_FORMATS:
-            try: return dt_str, datetime.strptime(dt_str, fmt)
+            try: 
+                dt = datetime.strptime(dt_str, fmt)
+                return dt_str, dt.replace(tzinfo=APP_TZ)
             except ValueError: pass
         return dt_str, None
 

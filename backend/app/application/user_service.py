@@ -39,6 +39,7 @@ class UserService:
         display_name: str,
         role: str = "user",
         module_ids: list[str] | None = None,
+        is_active: bool | None = None,
     ) -> UserProfileModel:
         """Create a new user profile with optional module access."""
         user = await self._repo.create(
@@ -46,6 +47,7 @@ class UserService:
             email=email,
             display_name=display_name,
             role=role,
+            is_active=is_active,
         )
 
         if module_ids:

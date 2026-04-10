@@ -24,7 +24,7 @@ function AdminContent() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"users" | "tickets">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "requests" | "tickets">("users");
 
   // Create user modal
   const [showCreate, setShowCreate] = useState(false);
@@ -245,6 +245,13 @@ function AdminContent() {
           👥 Пользователи
         </button>
         <button 
+          className={`btn ${activeTab === "requests" ? "btn--primary" : "btn--ghost"}`}
+          onClick={() => setActiveTab("requests")}
+          style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
+        >
+          📝 Заявки {users.filter(u => !u.is_active).length > 0 && <span className="admin-badge" style={{ backgroundColor: "var(--accent)", marginLeft: 8 }}>{users.filter(u => !u.is_active).length}</span>}
+        </button>
+        <button 
           className={`btn ${activeTab === "tickets" ? "btn--primary" : "btn--ghost"}`}
           onClick={() => setActiveTab("tickets")}
           style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
@@ -253,13 +260,17 @@ function AdminContent() {
         </button>
       </div>
 
-      {activeTab === "users" ? (
+      {activeTab === "users" || activeTab === "requests" ? (
         <>
           {/* Users List */}
-          <h2 style={{ marginBottom: "var(--space-md)" }}>Пользователи</h2>
+          <h2 style={{ marginBottom: "var(--space-md)" }}>
+            {activeTab === "users" ? "Все пользователи" : "Новые заявки"}
+          </h2>
           <div className="admin-user-list">
-            {users.map((user) => (
-              <div key={user.id} className="admin-user-card" id={`admin-user-${user.id}`}>
+            {users
+              .filter(u => activeTab === "users" ? true : !u.is_active)
+              .map((user) => (
+              <div key={user.id} className="admin-user-card" id={`admin-user-${user.id}`} style={!user.is_active ? { borderLeft: "3px solid var(--accent)" } : {}}>
                 <div className="admin-user-card__info">
                   <div className="admin-user-card__avatar">
                     {user.display_name.charAt(0).toUpperCase()}
@@ -271,7 +282,7 @@ function AdminContent() {
                         <span className="admin-badge">Админ</span>
                       )}
                       {!user.is_active && (
-                        <span className="inactive-badge">Неактивен</span>
+                        <span className="inactive-badge" style={{ backgroundColor: "rgba(245, 158, 11, 0.1)", color: "var(--accent)", border: "1px solid rgba(245, 158, 11, 0.2)" }}>Новая заявка</span>
                       )}
                     </div>
                     <div className="admin-user-card__email">{user.email}</div>
@@ -283,11 +294,22 @@ function AdminContent() {
                               return mod ? `${mod.icon || "📦"} ${mod.name}` : mid;
                             })
                             .join(" • ")
-                        : "Нет модулей"}
+                        : "Нет доступных модулей"}
                     </div>
                   </div>
                 </div>
                 <div className="admin-user-card__actions">
+                  {!user.is_active && (
+                    <button
+                      className="btn btn--primary btn--sm"
+                      onClick={async () => {
+                        await handleToggleActive(user);
+                        openModuleEditor(user); // Prompt to assign modules after activation
+                      }}
+                    >
+                      ✅ Одобрить
+                    </button>
+                  )}
                   <button
                     className="btn btn--ghost btn--sm"
                     onClick={() => openModuleEditor(user)}
@@ -314,6 +336,9 @@ function AdminContent() {
                 </div>
               </div>
             ))}
+            {activeTab === "requests" && users.filter(u => !u.is_active).length === 0 && (
+              <div className="empty-state">Нет новых заявок на регистрацию</div>
+            )}
           </div>
         </>
       ) : (

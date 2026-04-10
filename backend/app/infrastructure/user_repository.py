@@ -63,6 +63,7 @@ class UserRepository:
         email: str,
         display_name: str,
         role: str = "user",
+        is_active: bool | None = None,
     ) -> UserProfileModel:
         """Create and return a new user profile."""
         user = UserProfileModel(
@@ -72,6 +73,8 @@ class UserRepository:
             role=role,
             module_access=[],
         )
+        if is_active is not None:
+            user.is_active = is_active
         self._session.add(user)
         await self._session.flush()
         return user

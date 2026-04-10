@@ -131,6 +131,7 @@ async def get_current_user(
             email=email,
             display_name=display_name,
             role=role,
+            is_active=True if role == "admin" else False,
         )
 
         # If admin, grant access to all modules
@@ -148,7 +149,7 @@ async def get_current_user(
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is deactivated",
+            detail="Ваш аккаунт ожидает подтверждения администратором",
         )
 
     return user

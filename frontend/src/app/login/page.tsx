@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import Link from "next/link";
 
 export default function LoginPage() {
   const { signIn, loading: authLoading, user } = useAuth();
@@ -122,9 +123,18 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="login-footer">
-          Аккаунт предоставляется администратором
-        </p>
+        <div className="login-links" style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)", marginTop: "var(--space-xl)", textAlign: "center" }}>
+          <Link href="/forgot-password" style={{ color: "var(--text-muted)", fontSize: "0.9rem", textDecoration: "none" }}>
+            Забыли пароль?
+          </Link>
+          <div style={{ height: "1px", background: "var(--border-color)", margin: "var(--space-xs) 0" }} />
+          <p style={{ margin: 0, fontSize: "0.95rem" }}>
+            Нет аккаунта?{" "}
+            <Link href="/signup" style={{ color: "var(--accent)", fontWeight: "600", textDecoration: "none" }}>
+              Зарегистрироваться
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

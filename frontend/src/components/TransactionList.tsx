@@ -87,20 +87,26 @@ export default function TransactionList({
       <div className="tx-list-header" style={{
         display: 'flex', 
         alignItems: 'center', 
-        padding: '8px 16px',
-        color: 'var(--text-secondary)',
-        fontSize: '0.8rem',
-        textTransform: 'uppercase',
-        letterSpacing: '0.025em'
+        padding: '0 16px 16px 16px',
+        borderBottom: '1px solid var(--border-color)',
+        marginBottom: '16px'
       }}>
-        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px' }}>
+        <label className="checkbox-container">
           <input 
             type="checkbox" 
             checked={allSelected} 
             onChange={(e) => handleSelectAll(e.target.checked)}
-            style={{ width: '18px', height: '18px' }}
           />
-          Выбрать все
+          <span className="checkmark"></span>
+          <span className="checkbox-label" style={{ 
+            color: 'var(--text-muted)', 
+            fontSize: '0.75rem', 
+            textTransform: 'uppercase', 
+            letterSpacing: '0.05em',
+            fontWeight: 700
+          }}>
+            Выбрать все
+          </span>
         </label>
       </div>
 
@@ -124,21 +130,24 @@ export default function TransactionList({
               marginBottom: '12px', 
               padding: 0, 
               overflow: 'hidden',
-              border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border)',
-              background: isSelected ? 'rgba(13, 148, 136, 0.05)' : 'var(--card-bg)'
+              border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-color)',
+              background: isSelected ? 'var(--bg-glass-hover)' : 'var(--bg-card)',
+              boxShadow: isSelected ? 'var(--shadow-glow)' : 'none'
             }}
             id={`tx-item-${tx.id}`}
           >
             {/* Row Layout with Checkbox */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ paddingLeft: '16px' }}>
-                <input 
-                  type="checkbox" 
-                  checked={isSelected} 
-                  onChange={(e) => handleSelectOne(tx.id, e.target.checked)}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                />
+                <label className="checkbox-container">
+                  <input 
+                    type="checkbox" 
+                    checked={isSelected} 
+                    onChange={(e) => handleSelectOne(tx.id, e.target.checked)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span className="checkmark"></span>
+                </label>
               </div>
 
               {/* Clickable Header Area */}

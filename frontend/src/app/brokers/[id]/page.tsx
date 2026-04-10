@@ -26,6 +26,8 @@ export default function BrokerDetailPage() {
   const [debtInfo, setDebtInfo] = useState<DebtInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deletingBulk, setDeletingBulk] = useState(false);
 
   // Modal states
   const [showAccrual, setShowAccrual] = useState(false);
@@ -59,11 +61,29 @@ export default function BrokerDetailPage() {
     if (!confirm("Удалить операцию?")) return;
     try {
       await deleteTransaction(id);
+      setSelectedIds((prev) => prev.filter((sid) => sid !== id));
       await fetchData();
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Failed to delete transaction"
       );
+    }
+  };
+
+  const handleDeleteBulk = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Удалить выбранные операции (${selectedIds.length} шт.)?`)) return;
+    
+    try {
+      setDeletingBulk(true);
+      const { deleteTransactionsBulk } = await import("@/lib/api");
+      await deleteTransactionsBulk(selectedIds);
+      setSelectedIds([]);
+      await fetchData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delete transactions");
+    } finally {
+      setDeletingBulk(false);
     }
   };
 
@@ -156,12 +176,23 @@ export default function BrokerDetailPage() {
       </div>
 
       {/* Transaction List */}
-      <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '40px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <h2>Операции</h2>
           <span style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
             {transactions.length} шт.
           </span>
+          
+          {selectedIds.length > 0 && (
+            <button
+              className="btn btn--danger btn--sm animate-in"
+              onClick={handleDeleteBulk}
+              disabled={deletingBulk}
+              style={{ marginLeft: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              {deletingBulk ? <span className="spinner" /> : "✕"} Удалить выбранные ({selectedIds.length})
+            </button>
+          )}
         </div>
         <a 
           href={getExportUrl(brokerId)} 
@@ -176,6 +207,8 @@ export default function BrokerDetailPage() {
       <TransactionList
         transactions={transactions}
         onDelete={handleDeleteTx}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
 
       {/* Modals */}
